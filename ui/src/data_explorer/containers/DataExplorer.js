@@ -32,6 +32,7 @@ class DataExplorer extends Component {
     if (queryConfigs.length === 0) {
       this.props.queryConfigActions.addQuery()
     }
+
     return queryConfigs[0]
   }
 
