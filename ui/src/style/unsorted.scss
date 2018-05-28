@@ -6,7 +6,7 @@
   margin: 0 0 0 4px;
 }
 .text-center .btn {
-  margin: 0 2px;
+  margin: 0 6px;
 }
 .default-source-label {
   display: inline-block;
@@ -57,6 +57,7 @@
   justify-content: center;
   color: $g12-forge;
   padding: 20px 0;
+  @include no-user-select();
 
   h4,
   h5 {
@@ -179,6 +180,11 @@ br {
   border-left: 2px solid $g5-pepper;
   width: 278px;
 }
+.source-table--kapacitor__view-only {
+  @include no-user-select();
+  font-size: 14px;
+  font-weight: 600;
+}
 
 /*
   Styles for the Status Dashboard
@@ -197,7 +203,7 @@ br {
   margin-bottom: 4px;
 
   &.intro {
-    @include gradient-h($c-pool,$c-star);
+    @include gradient-h($c-pool, $c-star);
     color: $g20-white;
   }
 
@@ -267,6 +273,7 @@ $tick-script-overlay-margin: 30px;
   flex-wrap: nowrap;
 }
 .group-by-time--label {
+  white-space: nowrap;
   margin: 0;
   color: $g12-forge;
   padding: 0 6px;
@@ -299,7 +306,7 @@ $tick-script-overlay-margin: 30px;
   -----------------------------------------------------------------------------
 */
 .icon.download.dlcsv:before {
-  content: "\e91d";
+  content: '\e91d';
   font-weight: bold;
   color: #bec2cc;
 }
@@ -316,5 +323,246 @@ $tick-script-overlay-margin: 30px;
 .dropdown .dropdown-menu li.dropdown-item {
   display: block;
 
-  > a {display: block;}
+  > a {
+    display: block;
+  }
+}
+
+/*  Deletable tabs in .nav-tablist
+  -----------------------------------------------------------------------------
+  TODO: Add this into the theme styles
+*/
+.nav-tab--delete {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  margin-left: 4px;
+  border-radius: 3px;
+  position: relative;
+  background-color: $g5-pepper;
+
+  // Psuedo elements used to form the X
+  &:before,
+  &:after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    background-color: $g11-sidewalk;
+    width: 10px;
+    height: 2px;
+    border-radius: 1px;
+  }
+  &:before {
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+  &:after {
+    transform: translate(-50%, -50%) rotate(-45deg);
+  }
+}
+
+/*
+  Auto Refresh Dropdown
+  -----------------------------------------------------------------------------
+*/
+.autorefresh-dropdown {
+  display: flex;
+  flex-wrap: nowrap;
+
+  &.paused .dropdown {
+    margin-right: 4px;
+  }
+  &.paused .dropdown > .btn.dropdown-toggle {
+    width: 126px;
+  }
+}
+
+/*
+  Dashboard Switcher
+  -----------------------------------------------------------------------------
+*/
+.dropdown.dashboard-switcher {
+  margin-right: 4px;
+}
+.dropdown.dashboard-switcher .btn.dropdown-toggle {
+  justify-content: center;
+}
+.dropdown.dashboard-switcher + h1.page-header__title {
+  margin-left: 6px;
+}
+
+.dropdown.dashboard-switcher .dropdown-item {
+  white-space: nowrap;
+}
+
+/*
+  Dashboard Name Editing
+  -----------------------------------------------------------------------------
+*/
+$dash-editable-header-padding: 7px;
+
+.page-header__left.page-header__dash-editable,
+.dashboard-title,
+.dashboard-title input[type='text'].form-control.dashboard-title--input,
+.dashboard-title h1 {
+  flex: 1 0 0;
+}
+.dashboard-title {
+  display: flex;
+
+  input[type='text'].form-control.dashboard-title--input,
+  input[type='text'].form-control.dashboard-title--input:focus,
+  h1 {
+    font-size: $page-header-size;
+    font-weight: $page-header-weight;
+    padding: 0 $dash-editable-header-padding;
+  }
+
+  input[type='text'].form-control.dashboard-title--input,
+  input[type='text'].form-control.dashboard-title--input:focus {
+    font-size: $page-header-size;
+    font-weight: $page-header-weight;
+  }
+
+  h1 {
+    @include no-user-select();
+    position: relative;
+    border: 2px solid $g0-obsidian;
+    color: $g17-whisper;
+    height: 30px;
+    line-height: 28px;
+    border-radius: 4px;
+    margin: 0;
+    letter-spacing: 0;
+    text-transform: none;
+    transition: color 0.25s ease, background-color 0.25s ease,
+      border-color 0.25s ease;
+
+    &:after {
+      content: '\f058';
+      font-family: 'icomoon';
+      position: absolute;
+      font-size: 15px;
+      top: 50%;
+      right: $dash-editable-header-padding;
+      transform: translateY(-50%);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      color: $g11-sidewalk;
+    }
+
+    &:hover {
+      cursor: text;
+      color: $g20-white;
+      background-color: $g3-castle;
+      border-color: $g3-castle;
+
+      &:after {
+        opacity: 1;
+      }
+    }
+  }
+}
+
+/*  Add borders between items in .nav-tablist
+    -----------------------------------------------------------------------------
+    TODO: Add these styles into the theme
+  */
+
+.nav.nav-tablist {
+  background-color: $g5-pepper;
+
+  > li {
+    margin-right: 2px;
+
+    &:last-child {
+      margin-right: 0;
+    }
+  }
+}
+
+/*
+  Fake form padding without <form>
+
+*/
+
+div.faux-form {
+  .form-group.col-xs-1,
+  .form-group.col-xs-2,
+  .form-group.col-xs-3,
+  .form-group.col-xs-4,
+  .form-group.col-xs-5,
+  .form-group.col-xs-6,
+  .form-group.col-xs-7,
+  .form-group.col-xs-8,
+  .form-group.col-xs-9,
+  .form-group.col-xs-10,
+  .form-group.col-xs-11,
+  .form-group.col-xs-12,
+  .form-group.col-sm-1,
+  .form-group.col-sm-2,
+  .form-group.col-sm-3,
+  .form-group.col-sm-4,
+  .form-group.col-sm-5,
+  .form-group.col-sm-6,
+  .form-group.col-sm-7,
+  .form-group.col-sm-8,
+  .form-group.col-sm-9,
+  .form-group.col-sm-10,
+  .form-group.col-sm-11,
+  .form-group.col-sm-12,
+  .form-group.col-md-1,
+  .form-group.col-md-2,
+  .form-group.col-md-3,
+  .form-group.col-md-4,
+  .form-group.col-md-5,
+  .form-group.col-md-6,
+  .form-group.col-md-7,
+  .form-group.col-md-8,
+  .form-group.col-md-9,
+  .form-group.col-md-10,
+  .form-group.col-md-11,
+  .form-group.col-md-12,
+  .form-group.col-lg-1,
+  .form-group.col-lg-2,
+  .form-group.col-lg-3,
+  .form-group.col-lg-4,
+  .form-group.col-lg-5,
+  .form-group.col-lg-6,
+  .form-group.col-lg-7,
+  .form-group.col-lg-8,
+  .form-group.col-lg-9,
+  .form-group.col-lg-10,
+  .form-group.col-lg-11,
+  .form-group.col-lg-12 {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}
+
+/*
+  Stretch to fit Dropdowns
+  -----------------------------------------------------------------------------
+*/
+
+div.dropdown.dropdown-stretch,
+div.dropdown.dropdown-stretch > div.dropdown-toggle,
+div.dropdown.dropdown-stretch > button.dropdown-toggle {
+  width: 100%;
+}
+
+/*
+  Delete Source
+  -----------------------------------------------------------------------------
+*/
+.delete-source {
+  display: inline-block;
+}
+
+/*
+  Add spacing between time format dropdown and input
+  -----------------------------------------------------------------------------
+*/
+.custom-time-format {
+  margin-top: 4px;
 }

@@ -1,40 +1,30 @@
-import React, {PropTypes} from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
+import {isCellUntitled} from 'src/dashboards/utils/cellGetters'
 
-import CustomTimeIndicator from 'shared/components/CustomTimeIndicator'
-
-import {NEW_DEFAULT_DASHBOARD_CELL} from 'src/dashboards/constants/index'
-
-const LayoutCellHeader = ({queries, isEditable, cellName}) => {
-  const cellNameIsDefault = cellName === NEW_DEFAULT_DASHBOARD_CELL.name
-
-  const headingClass = `dash-graph--heading ${isEditable
-    ? 'dash-graph--heading-draggable'
-    : ''}`
+const LayoutCellHeader = ({isEditable, cellName}) => {
+  const headingClass = `dash-graph--heading ${
+    isEditable ? 'dash-graph--draggable dash-graph--heading-draggable' : ''
+  }`
 
   return (
     <div className={headingClass}>
       <span
         className={
-          cellNameIsDefault
+          isCellUntitled(cellName)
             ? 'dash-graph--name dash-graph--name__default'
             : 'dash-graph--name'
         }
       >
         {cellName}
-        <div className="dash-graph--custom-indicators">
-          {queries && queries.length
-            ? <CustomTimeIndicator queries={queries} />
-            : null}
-        </div>
       </span>
     </div>
   )
 }
 
-const {arrayOf, bool, shape, string} = PropTypes
+const {bool, string} = PropTypes
 
 LayoutCellHeader.propTypes = {
-  queries: arrayOf(shape()),
   isEditable: bool,
   cellName: string,
 }

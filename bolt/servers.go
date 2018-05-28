@@ -20,6 +20,29 @@ type ServersStore struct {
 	client *Client
 }
 
+func (s *ServersStore) Migrate(ctx context.Context) error {
+	servers, err := s.All(ctx)
+	if err != nil {
+		return err
+	}
+
+	defaultOrg, err := s.client.OrganizationsStore.DefaultOrganization(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, server := range servers {
+		if server.Organization == "" {
+			server.Organization = defaultOrg.ID
+			if err := s.Update(ctx, server); err != nil {
+				return nil
+			}
+		}
+	}
+
+	return nil
+}
+
 // All returns all known servers
 func (s *ServersStore) All(ctx context.Context) ([]chronograf.Server, error) {
 	var srcs []chronograf.Server

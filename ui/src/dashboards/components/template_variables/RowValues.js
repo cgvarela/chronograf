@@ -1,4 +1,5 @@
-import React, {PropTypes} from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
 import TableInput from 'src/dashboards/components/template_variables/TableInput'
 
 const RowValues = ({
@@ -19,7 +20,7 @@ const RowValues = ({
         onStartEdit={onStartEdit}
         autoFocusTarget={autoFocusTarget}
         spellCheck={false}
-        autoComplete={false}
+        autoComplete="false"
       />
     )
   }

@@ -1,21 +1,32 @@
-import React, {PropTypes} from 'react'
-import {OPERATORS} from 'src/kapacitor/constants'
+import React from 'react'
+import PropTypes from 'prop-types'
+import {THRESHOLD_OPERATORS} from 'src/kapacitor/constants'
 import Dropdown from 'shared/components/Dropdown'
+import _ from 'lodash'
 
 const mapToItems = (arr, type) => arr.map(text => ({text, type}))
-const operators = mapToItems(OPERATORS, 'operator')
+const operators = mapToItems(THRESHOLD_OPERATORS, 'operator')
+const noopSubmit = e => e.preventDefault()
+const getField = ({fields}) => {
+  const alias = _.get(fields, ['0', 'alias'], false)
+  if (!alias) {
+    return _.get(fields, ['0', 'value'], 'Select a Time-Series')
+  }
+
+  return alias
+}
 
 const Threshold = ({
-  rule: {values: {operator, value, rangeValue}},
+  rule: {
+    values: {operator, value, rangeValue},
+  },
   query,
   onDropdownChange,
   onRuleTypeInputChange,
-}) =>
-  <div className="rule-section--row rule-section--border-bottom">
+}) => (
+  <div className="rule-section--row rule-section--row-first rule-section--border-bottom">
     <p>Send Alert where</p>
-    <span className="rule-builder--metric">
-      {query.fields.length ? query.fields[0].field : 'Select a Time-Series'}
-    </span>
+    <span className="rule-builder--metric">{getField(query)}</span>
     <p>is</p>
     <Dropdown
       className="dropdown-180"
@@ -24,7 +35,7 @@ const Threshold = ({
       selected={operator}
       onChoose={onDropdownChange}
     />
-    <form style={{display: 'flex'}}>
+    <form style={{display: 'flex'}} onSubmit={noopSubmit}>
       <input
         className="form-control input-sm form-malachite monotype"
         style={{width: '160px', marginLeft: '6px'}}
@@ -39,7 +50,7 @@ const Threshold = ({
             : null
         }
       />
-      {(operator === 'inside range' || operator === 'outside range') &&
+      {(operator === 'inside range' || operator === 'outside range') && (
         <input
           className="form-control input-sm form-malachite monotype"
           name="upper"
@@ -49,9 +60,11 @@ const Threshold = ({
           spellCheck="false"
           value={rangeValue}
           onChange={onRuleTypeInputChange}
-        />}
+        />
+      )}
     </form>
   </div>
+)
 
 const {shape, string, func} = PropTypes
 

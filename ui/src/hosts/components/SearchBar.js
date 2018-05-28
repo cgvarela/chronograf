@@ -1,6 +1,9 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import _ from 'lodash'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class SearchBar extends Component {
   constructor(props) {
     super(props)
@@ -10,8 +13,7 @@ class SearchBar extends Component {
   }
 
   componentWillMount() {
-    const waitPeriod = 300
-    this.handleSearch = _.debounce(this.handleSearch, waitPeriod)
+    this.handleSearch = _.debounce(this.handleSearch, 50)
   }
 
   handleSearch = () => {
@@ -23,27 +25,32 @@ class SearchBar extends Component {
   }
 
   render() {
+    const {placeholder, width} = this.props
     return (
-      <div className="users__search-widget input-group">
+      <div className="search-widget" style={{width: `${width}px`}}>
         <input
           type="text"
-          className="form-control"
-          placeholder="Filter by Host..."
+          className="form-control input-sm"
+          placeholder={placeholder}
           ref="searchInput"
           onChange={this.handleChange}
         />
-        <div className="input-group-addon">
-          <span className="icon search" aria-hidden="true" />
-        </div>
+        <span className="icon search" />
       </div>
     )
   }
 }
 
-const {func} = PropTypes
+const {func, number, string} = PropTypes
+
+SearchBar.defaultProps = {
+  width: 260,
+}
 
 SearchBar.propTypes = {
+  width: number,
   onSearch: func.isRequired,
+  placeholder: string.isRequired,
 }
 
 export default SearchBar

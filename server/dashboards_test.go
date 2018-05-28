@@ -144,6 +144,7 @@ func TestValidDashboardRequest(t *testing.T) {
 		{
 			name: "Updates all cell widths/heights",
 			d: chronograf.Dashboard{
+				Organization: "1337",
 				Cells: []chronograf.DashboardCell{
 					{
 						W: 0,
@@ -166,6 +167,7 @@ func TestValidDashboardRequest(t *testing.T) {
 				},
 			},
 			want: chronograf.Dashboard{
+				Organization: "1337",
 				Cells: []chronograf.DashboardCell{
 					{
 						W: 4,
@@ -190,13 +192,14 @@ func TestValidDashboardRequest(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		err := ValidDashboardRequest(&tt.d)
+		// TODO(desa): this Okay?
+		err := ValidDashboardRequest(&tt.d, "0")
 		if (err != nil) != tt.wantErr {
 			t.Errorf("%q. ValidDashboardRequest() error = %v, wantErr %v", tt.name, err, tt.wantErr)
 			continue
 		}
-		if !reflect.DeepEqual(tt.d, tt.want) {
-			t.Errorf("%q. ValidDashboardRequest() = %v, want %v", tt.name, tt.d, tt.want)
+		if diff := cmp.Diff(tt.d, tt.want); diff != "" {
+			t.Errorf("%q. ValidDashboardRequest(). got/want diff:\n%s", tt.name, diff)
 		}
 	}
 }
@@ -210,6 +213,7 @@ func Test_newDashboardResponse(t *testing.T) {
 		{
 			name: "creates a dashboard response",
 			d: chronograf.Dashboard{
+				Organization: "0",
 				Cells: []chronograf.DashboardCell{
 					{
 						ID: "a",
@@ -219,6 +223,13 @@ func Test_newDashboardResponse(t *testing.T) {
 							{
 								Source:  "/chronograf/v1/sources/1",
 								Command: "SELECT donors from hill_valley_preservation_society where time > '1985-10-25 08:00:00'",
+								Shifts: []chronograf.TimeShift{
+									{
+										Label:    "Best Week Evar",
+										Unit:     "d",
+										Quantity: "7",
+									},
+								},
 							},
 						},
 						Axes: map[string]chronograf.Axis{
@@ -245,7 +256,8 @@ func Test_newDashboardResponse(t *testing.T) {
 				},
 			},
 			want: &dashboardResponse{
-				Templates: []templateResponse{},
+				Organization: "0",
+				Templates:    []templateResponse{},
 				Cells: []dashboardCellResponse{
 					dashboardCellResponse{
 						Links: dashboardCellLinks{
@@ -267,9 +279,17 @@ func Test_newDashboardResponse(t *testing.T) {
 										},
 										Tags:            make(map[string][]string, 0),
 										AreTagsAccepted: false,
+										Shifts: []chronograf.TimeShift{
+											{
+												Label:    "Best Week Evar",
+												Unit:     "d",
+												Quantity: "7",
+											},
+										},
 									},
 								},
 							},
+							CellColors: []chronograf.CellColor{},
 							Axes: map[string]chronograf.Axis{
 								"x": chronograf.Axis{
 									Bounds: []string{"0", "100"},
@@ -279,7 +299,7 @@ func Test_newDashboardResponse(t *testing.T) {
 									Label:  "foo",
 								},
 								"y2": chronograf.Axis{
-									Bounds: []string{},
+									Bounds: []string{"", ""},
 								},
 							},
 						},
@@ -294,15 +314,16 @@ func Test_newDashboardResponse(t *testing.T) {
 							H:  4,
 							Axes: map[string]chronograf.Axis{
 								"x": chronograf.Axis{
-									Bounds: []string{},
+									Bounds: []string{"", ""},
 								},
 								"y": chronograf.Axis{
-									Bounds: []string{},
+									Bounds: []string{"", ""},
 								},
 								"y2": chronograf.Axis{
-									Bounds: []string{},
+									Bounds: []string{"", ""},
 								},
 							},
+							CellColors: []chronograf.CellColor{},
 							Queries: []chronograf.DashboardQuery{
 								{
 									Command: "SELECT winning_horses from grays_sports_alamanc where time > now() - 15m",
@@ -311,8 +332,8 @@ func Test_newDashboardResponse(t *testing.T) {
 										Measurement: "grays_sports_alamanc",
 										Fields: []chronograf.Field{
 											{
-												Field: "winning_horses",
-												Funcs: []string{},
+												Type:  "field",
+												Value: "winning_horses",
 											},
 										},
 										GroupBy: chronograf.GroupBy{

@@ -1,5 +1,6 @@
 import _ from 'lodash'
-import timeRanges from 'hson!shared/data/timeRanges.hson'
+import {timeRanges} from 'shared/data/timeRanges'
+import {NULL_HOVER_TIME} from 'src/shared/constants/tableGraph'
 
 const {lower, upper} = timeRanges.find(tr => tr.lower === 'now() - 1h')
 
@@ -8,6 +9,8 @@ const initialState = {
   timeRange: {lower, upper},
   isEditMode: false,
   cellQueryStatus: {queryID: null, status: null},
+  hoverTime: NULL_HOVER_TIME,
+  activeCellID: '',
 }
 
 import {
@@ -40,7 +43,6 @@ export default function ui(state = initialState, action) {
           d => (d.id === dashboard.id ? dashboard : d)
         ),
       }
-
       return {...state, ...newState}
     }
 
@@ -279,29 +281,50 @@ export default function ui(state = initialState, action) {
     case 'EDIT_TEMPLATE_VARIABLE_VALUES': {
       const {dashboardID, templateID, values} = action.payload
 
-      const dashboards = state.dashboards.map(
-        dashboard =>
-          dashboard.id === dashboardID
-            ? {
-                ...dashboard,
-                templates: dashboard.templates.map(
-                  template =>
-                    template.id === templateID
-                      ? {
-                          ...template,
-                          values: values.map((value, i) => ({
-                            selected: i === 0,
-                            value,
-                            type: TEMPLATE_VARIABLE_TYPES[template.type],
-                          })),
-                        }
-                      : template
-                ),
-              }
-            : dashboard
-      )
+      const dashboards = state.dashboards.map(dashboard => {
+        if (dashboard.id !== dashboardID) {
+          return dashboard
+        }
+
+        const templates = dashboard.templates.map(template => {
+          if (template.id !== templateID || template.type === 'csv') {
+            return template
+          }
+
+          const selectedValue = _.get(template, 'values', []).find(
+            v => v.selected
+          )
+
+          const v = values.map(value => ({
+            selected: _.get(selectedValue, 'value') === value,
+            value,
+            type: TEMPLATE_VARIABLE_TYPES[template.type],
+          }))
+
+          return {
+            ...template,
+            values: v,
+          }
+        })
+
+        return {
+          ...dashboard,
+          templates,
+        }
+      })
 
       return {...state, dashboards}
+    }
+
+    case 'SET_HOVER_TIME': {
+      const {hoverTime} = action.payload
+
+      return {...state, hoverTime}
+    }
+
+    case 'SET_ACTIVE_CELL': {
+      const {activeCellID} = action.payload
+      return {...state, activeCellID}
     }
   }
 

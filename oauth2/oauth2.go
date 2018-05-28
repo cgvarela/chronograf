@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	gojwt "github.com/dgrijalva/jwt-go"
 	"golang.org/x/oauth2"
 )
 
@@ -30,10 +31,12 @@ var (
 
 // Principal is any entity that can be authenticated
 type Principal struct {
-	Subject   string
-	Issuer    string
-	ExpiresAt time.Time
-	IssuedAt  time.Time
+	Subject      string
+	Issuer       string
+	Organization string
+	Group        string
+	ExpiresAt    time.Time
+	IssuedAt     time.Time
 }
 
 /* Interfaces */
@@ -52,6 +55,10 @@ type Provider interface {
 	PrincipalID(provider *http.Client) (string, error)
 	// Name is the name of the Provider
 	Name() string
+	// Group is a comma delimited list of groups and organizations for a provider
+	// TODO: This will break if there are any group names that contain commas.
+	//       I think this is okay, but I'm not 100% certain.
+	Group(provider *http.Client) (string, error)
 }
 
 // Mux is a collection of handlers responsible for servicing an Oauth2 interaction between a browser and a provider
@@ -89,4 +96,6 @@ type Tokenizer interface {
 	ValidPrincipal(ctx context.Context, token Token, lifespan time.Duration) (Principal, error)
 	// ExtendedPrincipal adds the extention to the principal's lifespan.
 	ExtendedPrincipal(ctx context.Context, principal Principal, extension time.Duration) (Principal, error)
+	// GetClaims returns a map with verified claims
+	GetClaims(tokenString string) (gojwt.MapClaims, error)
 }

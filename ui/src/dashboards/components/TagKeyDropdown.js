@@ -1,10 +1,13 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 
 import Dropdown from 'shared/components/Dropdown'
 import {showTagKeys} from 'shared/apis/metaQuery'
 import parsers from 'shared/parsing'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 const {tagKeys: showTagKeysParser} = parsers
 
+@ErrorHandling
 class TagKeyDropdown extends Component {
   constructor(props) {
     super(props)
@@ -50,8 +53,10 @@ class TagKeyDropdown extends Component {
       tagKey,
       onSelectTagKey,
       onErrorThrown,
+      source: {
+        links: {proxy},
+      },
     } = this.props
-    const {source: {links: {proxy}}} = this.context
 
     try {
       const {data} = await showTagKeys({source: proxy, database, measurement})
@@ -71,15 +76,12 @@ class TagKeyDropdown extends Component {
 
 const {func, shape, string} = PropTypes
 
-TagKeyDropdown.contextTypes = {
+TagKeyDropdown.propTypes = {
   source: shape({
     links: shape({
       proxy: string.isRequired,
     }).isRequired,
   }).isRequired,
-}
-
-TagKeyDropdown.propTypes = {
   database: string.isRequired,
   measurement: string.isRequired,
   tagKey: string,

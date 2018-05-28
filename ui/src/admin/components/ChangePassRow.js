@@ -1,26 +1,24 @@
-import React, {Component, PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 
 import OnClickOutside from 'shared/components/OnClickOutside'
-import ConfirmButtons from 'shared/components/ConfirmButtons'
+import ConfirmOrCancel from 'shared/components/ConfirmOrCancel'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class ChangePassRow extends Component {
   constructor(props) {
     super(props)
     this.state = {
       showForm: false,
     }
-    this.showForm = ::this.showForm
-    this.handleCancel = ::this.handleCancel
-    this.handleKeyPress = ::this.handleKeyPress
-    this.handleEdit = ::this.handleEdit
-    this.handleSubmit = ::this.handleSubmit
   }
 
-  showForm() {
+  showForm = () => {
     this.setState({showForm: true})
   }
 
-  handleCancel() {
+  handleCancel = () => {
     this.setState({showForm: false})
   }
 
@@ -28,12 +26,12 @@ class ChangePassRow extends Component {
     this.setState({showForm: false})
   }
 
-  handleSubmit(user) {
+  handleSubmit = user => {
     this.props.onApply(user)
     this.setState({showForm: false})
   }
 
-  handleKeyPress(user) {
+  handleKeyPress = user => {
     return e => {
       if (e.key === 'Enter') {
         this.handleSubmit(user)
@@ -41,7 +39,7 @@ class ChangePassRow extends Component {
     }
   }
 
-  handleEdit(user) {
+  handleEdit = user => {
     return e => {
       this.props.onEdit(user, {[e.target.name]: e.target.value})
     }
@@ -63,7 +61,7 @@ class ChangePassRow extends Component {
             onKeyPress={this.handleKeyPress(user)}
             autoFocus={true}
           />
-          <ConfirmButtons
+          <ConfirmOrCancel
             onConfirm={this.handleSubmit}
             item={user}
             onCancel={this.handleCancel}

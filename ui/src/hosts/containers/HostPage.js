@@ -1,78 +1,67 @@
-import React, {PropTypes} from 'react'
-import {Link} from 'react-router'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import {connect} from 'react-redux'
 import {bindActionCreators} from 'redux'
 import _ from 'lodash'
 import classnames from 'classnames'
 
-import Dygraph from 'src/external/dygraph'
-
 import LayoutRenderer from 'shared/components/LayoutRenderer'
 import DashboardHeader from 'src/dashboards/components/DashboardHeader'
 import FancyScrollbar from 'shared/components/FancyScrollbar'
+import ManualRefresh from 'src/shared/components/ManualRefresh'
+import {generateForHosts} from 'src/utils/tempVars'
 
-import timeRanges from 'hson!shared/data/timeRanges.hson'
+import {timeRanges} from 'shared/data/timeRanges'
 import {
-  getMappings,
-  getAppsForHosts,
+  getLayouts,
+  getAppsForHost,
   getMeasurementsForHost,
   getAllHosts,
 } from 'src/hosts/apis'
-import {fetchLayouts} from 'shared/apis'
 
 import {setAutoRefresh} from 'shared/actions/app'
 import {presentationButtonDispatcher} from 'shared/dispatchers'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
-const {shape, string, bool, func, number} = PropTypes
-
-export const HostPage = React.createClass({
-  propTypes: {
-    source: shape({
-      links: shape({
-        proxy: string.isRequired,
-      }).isRequired,
-      telegraf: string.isRequired,
-      id: string.isRequired,
-    }),
-    params: shape({
-      hostID: string.isRequired,
-    }).isRequired,
-    location: shape({
-      query: shape({
-        app: string,
-      }),
-    }),
-    autoRefresh: number.isRequired,
-    handleChooseAutoRefresh: func.isRequired,
-    inPresentationMode: bool,
-    handleClickPresentationButton: func,
-  },
-
-  getInitialState() {
-    return {
+@ErrorHandling
+class HostPage extends Component {
+  constructor(props) {
+    super(props)
+    this.state = {
       layouts: [],
-      hosts: [],
+      hosts: {},
       timeRange: timeRanges.find(tr => tr.lower === 'now() - 1h'),
       dygraphs: [],
     }
-  },
+  }
 
-  async componentDidMount() {
-    const {source, params, location} = this.props
+  async fetchHostsAndMeasurements(layouts) {
+    const {source, params} = this.props
 
-    // fetching layouts and mappings can be done at the same time
-    const {data: {layouts}} = await fetchLayouts()
-    const {data: {mappings}} = await getMappings()
     const hosts = await getAllHosts(source.links.proxy, source.telegraf)
-    const newHosts = await getAppsForHosts(
+    const host = await getAppsForHost(
       source.links.proxy,
-      hosts,
-      mappings,
+      params.hostID,
+      layouts,
       source.telegraf
     )
+
     const measurements = await getMeasurementsForHost(source, params.hostID)
 
-    const host = newHosts[this.props.params.hostID]
+    return {host, hosts, measurements}
+  }
+
+  async componentDidMount() {
+    const {
+      data: {layouts},
+    } = await getLayouts()
+    const {location} = this.props
+
+    // fetching layouts and mappings can be done at the same time
+    const {hosts, host, measurements} = await this.fetchHostsAndMeasurements(
+      layouts
+    )
+
     const focusedApp = location.query.app
 
     const filteredLayouts = layouts.filter(layout => {
@@ -91,41 +80,30 @@ export const HostPage = React.createClass({
     let filteredHosts = hosts
     if (focusedApp) {
       filteredHosts = _.pickBy(hosts, (val, __, ___) => {
-        return val.apps.includes(focusedApp)
+        return _.get(val, 'apps', []).includes(focusedApp)
       })
     }
 
     this.setState({layouts: filteredLayouts, hosts: filteredHosts}) // eslint-disable-line react/no-did-mount-set-state
-  },
+  }
 
-  handleChooseTimeRange({lower, upper}) {
+  handleChooseTimeRange = ({lower, upper}) => {
     if (upper) {
       this.setState({timeRange: {lower, upper}})
     } else {
       const timeRange = timeRanges.find(range => range.lower === lower)
       this.setState({timeRange})
     }
-  },
+  }
 
-  synchronizer(dygraph) {
-    const dygraphs = [...this.state.dygraphs, dygraph]
-    const numGraphs = this.state.layouts.reduce((acc, {cells}) => {
-      return acc + cells.length
-    }, 0)
+  get layouts() {
+    const {timeRange, layouts} = this.state
 
-    if (dygraphs.length === numGraphs) {
-      Dygraph.synchronize(dygraphs, {
-        selection: true,
-        zoom: false,
-        range: false,
-      })
+    if (layouts.length === 0) {
+      return ''
     }
-    this.setState({dygraphs})
-  },
 
-  renderLayouts(layouts) {
-    const {timeRange} = this.state
-    const {source, autoRefresh} = this.props
+    const {source, autoRefresh, manualRefresh} = this.props
 
     const autoflowLayouts = layouts.filter(layout => !!layout.autoflow)
 
@@ -137,7 +115,7 @@ export const HostPage = React.createClass({
     const autoflowCells = autoflowLayouts.reduce((allCells, layout) => {
       return allCells.concat(
         layout.cells.map(cell => {
-          const x = cellCount * cellWidth % pageWidth
+          const x = (cellCount * cellWidth) % pageWidth
           const y = Math.floor(cellCount * cellWidth / pageWidth) * cellHeight
           cellCount += 1
           return Object.assign(cell, {
@@ -163,7 +141,8 @@ export const HostPage = React.createClass({
         }
         cell.queries.forEach(q => {
           q.text = q.query
-          q.database = source.telegraf
+          q.db = source.telegraf
+          q.rp = source.defaultRP
         })
       })
       translateY = maxY
@@ -171,55 +150,50 @@ export const HostPage = React.createClass({
       return allCells.concat(layout.cells)
     }, [])
 
+    const tempVars = generateForHosts(source)
+
     return (
       <LayoutRenderer
-        timeRange={timeRange}
-        cells={layoutCells}
-        autoRefresh={autoRefresh}
         source={source}
-        host={this.props.params.hostID}
         isEditable={false}
-        synchronizer={this.synchronizer}
+        cells={layoutCells}
+        templates={tempVars}
+        timeRange={timeRange}
+        autoRefresh={autoRefresh}
+        manualRefresh={manualRefresh}
+        host={this.props.params.hostID}
       />
     )
-  },
+  }
 
   render() {
     const {
-      params: {hostID},
-      location: {query: {app}},
-      source: {id},
       autoRefresh,
-      handleChooseAutoRefresh,
+      onManualRefresh,
+      params: {hostID, sourceID},
       inPresentationMode,
+      handleChooseAutoRefresh,
       handleClickPresentationButton,
-      source,
     } = this.props
-    const {layouts, timeRange, hosts} = this.state
-    const appParam = app ? `?app=${app}` : ''
+    const {timeRange, hosts} = this.state
+    const names = _.map(hosts, ({name}) => ({
+      name,
+      link: `/sources/${sourceID}/hosts/${name}`,
+    }))
 
     return (
       <div className="page">
         <DashboardHeader
-          buttonText={hostID}
-          autoRefresh={autoRefresh}
+          names={names}
           timeRange={timeRange}
+          activeDashboard={hostID}
+          autoRefresh={autoRefresh}
           isHidden={inPresentationMode}
-          handleChooseTimeRange={this.handleChooseTimeRange}
+          onManualRefresh={onManualRefresh}
           handleChooseAutoRefresh={handleChooseAutoRefresh}
+          handleChooseTimeRange={this.handleChooseTimeRange}
           handleClickPresentationButton={handleClickPresentationButton}
-          source={source}
-        >
-          {Object.keys(hosts).map((host, i) => {
-            return (
-              <li className="dropdown-item" key={i}>
-                <Link to={`/sources/${id}/hosts/${host + appParam}`}>
-                  {host}
-                </Link>
-              </li>
-            )
-          })}
-        </DashboardHeader>
+        />
         <FancyScrollbar
           className={classnames({
             'page-contents': true,
@@ -227,16 +201,45 @@ export const HostPage = React.createClass({
           })}
         >
           <div className="container-fluid full-width dashboard">
-            {layouts.length > 0 ? this.renderLayouts(layouts) : ''}
+            {this.layouts}
           </div>
         </FancyScrollbar>
       </div>
     )
-  },
-})
+  }
+}
+
+const {shape, string, bool, func, number} = PropTypes
+
+HostPage.propTypes = {
+  source: shape({
+    links: shape({
+      proxy: string.isRequired,
+    }).isRequired,
+    telegraf: string.isRequired,
+    id: string.isRequired,
+  }),
+  params: shape({
+    hostID: string.isRequired,
+  }).isRequired,
+  location: shape({
+    query: shape({
+      app: string,
+    }),
+  }),
+  inPresentationMode: bool,
+  autoRefresh: number.isRequired,
+  manualRefresh: number.isRequired,
+  onManualRefresh: func.isRequired,
+  handleChooseAutoRefresh: func.isRequired,
+  handleClickPresentationButton: func,
+}
 
 const mapStateToProps = ({
-  app: {ephemeral: {inPresentationMode}, persisted: {autoRefresh}},
+  app: {
+    ephemeral: {inPresentationMode},
+    persisted: {autoRefresh},
+  },
 }) => ({
   inPresentationMode,
   autoRefresh,
@@ -247,4 +250,6 @@ const mapDispatchToProps = dispatch => ({
   handleClickPresentationButton: presentationButtonDispatcher(dispatch),
 })
 
-export default connect(mapStateToProps, mapDispatchToProps)(HostPage)
+export default connect(mapStateToProps, mapDispatchToProps)(
+  ManualRefresh(HostPage)
+)

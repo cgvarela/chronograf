@@ -1,43 +1,56 @@
-import React, {Component, PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
+import {connect} from 'react-redux'
+import {bindActionCreators} from 'redux'
 
+import {renameCell} from 'src/dashboards/actions/cellEditorOverlay'
+import {ErrorHandling} from 'src/shared/decorators/errors'
+
+@ErrorHandling
 class VisualizationName extends Component {
   constructor(props) {
     super(props)
 
     this.state = {
-      reset: false,
+      workingName: props.name,
     }
   }
+  handleChange = e => {
+    this.setState({workingName: e.target.value})
+  }
 
-  handleInputBlur = reset => e => {
-    this.props.onCellRename(reset ? this.props.defaultName : e.target.value)
-    this.setState({reset: false})
+  handleBlur = () => {
+    const {handleRenameCell} = this.props
+    const {workingName} = this.state
+
+    handleRenameCell(workingName)
   }
 
   handleKeyDown = e => {
-    if (e.key === 'Enter') {
-      this.inputRef.blur()
-    }
-    if (e.key === 'Escape') {
-      this.inputRef.value = this.props.defaultName
-      this.setState({reset: true}, () => this.inputRef.blur())
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.target.blur()
     }
   }
 
+  handleFocus = e => {
+    e.target.select()
+  }
+
   render() {
-    const {defaultName} = this.props
-    const {reset} = this.state
+    const {workingName} = this.state
 
     return (
       <div className="graph-heading">
         <input
           type="text"
-          className="form-control input-md"
-          defaultValue={defaultName}
-          onBlur={this.handleInputBlur(reset)}
+          className="form-control input-sm"
+          value={workingName}
+          onChange={this.handleChange}
+          onFocus={this.handleFocus}
+          onBlur={this.handleBlur}
           onKeyDown={this.handleKeyDown}
           placeholder="Name this Cell..."
-          ref={r => (this.inputRef = r)}
+          spellCheck={false}
         />
       </div>
     )
@@ -47,8 +60,20 @@ class VisualizationName extends Component {
 const {string, func} = PropTypes
 
 VisualizationName.propTypes = {
-  defaultName: string.isRequired,
-  onCellRename: func,
+  name: string.isRequired,
+  handleRenameCell: func,
 }
 
-export default VisualizationName
+const mapStateToProps = ({
+  cellEditorOverlay: {
+    cell: {name},
+  },
+}) => ({
+  name,
+})
+
+const mapDispatchToProps = dispatch => ({
+  handleRenameCell: bindActionCreators(renameCell, dispatch),
+})
+
+export default connect(mapStateToProps, mapDispatchToProps)(VisualizationName)

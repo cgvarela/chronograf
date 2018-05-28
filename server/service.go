@@ -11,15 +11,17 @@ import (
 
 // Service handles REST calls to the persistence
 type Service struct {
-	SourcesStore     chronograf.SourcesStore
-	ServersStore     chronograf.ServersStore
-	LayoutStore      chronograf.LayoutStore
-	UsersStore       chronograf.UsersStore
-	DashboardsStore  chronograf.DashboardsStore
-	TimeSeriesClient TimeSeriesClient
-	Logger           chronograf.Logger
-	UseAuth          bool
-	Databases        chronograf.Databases
+	Store                    DataStore
+	TimeSeriesClient         TimeSeriesClient
+	Logger                   chronograf.Logger
+	UseAuth                  bool
+	SuperAdminProviderGroups superAdminProviderGroups
+	Env                      chronograf.Environment
+	Databases                chronograf.Databases
+}
+
+type superAdminProviderGroups struct {
+	auth0 string
 }
 
 // TimeSeriesClient returns the correct client for a time series database.
@@ -51,7 +53,8 @@ func (c *InfluxClient) New(src chronograf.Source, logger chronograf.Logger) (chr
 	}
 	if src.Type == chronograf.InfluxEnterprise && src.MetaURL != "" {
 		tls := strings.Contains(src.MetaURL, "https")
-		return enterprise.NewClientWithTimeSeries(logger, src.MetaURL, src.Username, src.Password, tls, client)
+		insecure := src.InsecureSkipVerify
+		return enterprise.NewClientWithTimeSeries(logger, src.MetaURL, influx.DefaultAuthorization(&src), tls, insecure, client)
 	}
 	return client, nil
 }

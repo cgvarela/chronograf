@@ -1,4 +1,5 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import {connect} from 'react-redux'
 import {bindActionCreators} from 'redux'
 
@@ -11,21 +12,19 @@ import QueriesTable from 'src/admin/components/QueriesTable'
 import showDatabasesParser from 'shared/parsing/showDatabases'
 import showQueriesParser from 'shared/parsing/showQueries'
 import {TIMES} from 'src/admin/constants'
+import {notifyQueriesError} from 'shared/copy/notifications'
+import {ErrorHandling} from 'src/shared/decorators/errors'
+
 import {
   loadQueries as loadQueriesAction,
   setQueryToKill as setQueryToKillAction,
   killQueryAsync,
-} from 'src/admin/actions'
+} from 'src/admin/actions/influxdb'
 
-import {publishAutoDismissingNotification} from 'shared/dispatchers'
+import {notify as notifyAction} from 'shared/actions/notifications'
 
+@ErrorHandling
 class QueriesPage extends Component {
-  constructor(props) {
-    super(props)
-    this.updateQueries = ::this.updateQueries
-    this.handleKillQuery = ::this.handleKillQuery
-  }
-
   componentDidMount() {
     this.updateQueries()
     const updateInterval = 5000
@@ -42,12 +41,12 @@ class QueriesPage extends Component {
     return <QueriesTable queries={queries} onKillQuery={this.handleKillQuery} />
   }
 
-  updateQueries() {
+  updateQueries = () => {
     const {source, notify, loadQueries} = this.props
     showDatabases(source.links.proxy).then(resp => {
       const {databases, errors} = showDatabasesParser(resp.data)
       if (errors.length) {
-        errors.forEach(message => notify('error', message))
+        errors.forEach(message => notify(notifyQueriesError(message)))
         return
       }
 
@@ -58,7 +57,9 @@ class QueriesPage extends Component {
         queryResponses.forEach(queryResponse => {
           const result = showQueriesParser(queryResponse.data)
           if (result.errors.length) {
-            result.errors.forEach(message => notify('error', message))
+            result.errors.forEach(message =>
+              notify(notifyQueriesError(message))
+            )
           }
 
           allQueries.push(...result.queries)
@@ -78,7 +79,7 @@ class QueriesPage extends Component {
     })
   }
 
-  handleKillQuery(id) {
+  handleKillQuery = id => {
     const {source, killQuery} = this.props
     killQuery(source.links.proxy, id)
   }
@@ -97,10 +98,10 @@ QueriesPage.propTypes = {
   queryIDToKill: string,
   setQueryToKill: func,
   killQuery: func,
-  notify: func,
+  notify: func.isRequired,
 }
 
-const mapStateToProps = ({admin: {queries, queryIDToKill}}) => ({
+const mapStateToProps = ({adminInfluxDB: {queries, queryIDToKill}}) => ({
   queries,
   queryIDToKill,
 })
@@ -109,7 +110,7 @@ const mapDispatchToProps = dispatch => ({
   loadQueries: bindActionCreators(loadQueriesAction, dispatch),
   setQueryToKill: bindActionCreators(setQueryToKillAction, dispatch),
   killQuery: bindActionCreators(killQueryAsync, dispatch),
-  notify: bindActionCreators(publishAutoDismissingNotification, dispatch),
+  notify: bindActionCreators(notifyAction, dispatch),
 })
 
 export default connect(mapStateToProps, mapDispatchToProps)(QueriesPage)

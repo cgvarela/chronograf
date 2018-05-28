@@ -1,83 +1,124 @@
-import React, {PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
+import {connect} from 'react-redux'
+import {bindActionCreators} from 'redux'
 import _ from 'lodash'
 
 import HostsTable from 'src/hosts/components/HostsTable'
-import FancyScrollbar from 'shared/components/FancyScrollbar'
 import SourceIndicator from 'shared/components/SourceIndicator'
+import AutoRefreshDropdown from 'shared/components/AutoRefreshDropdown'
+import ManualRefresh from 'src/shared/components/ManualRefresh'
 
-import {getCpuAndLoadForHosts, getMappings, getAppsForHosts} from '../apis'
+import {getCpuAndLoadForHosts, getLayouts, getAppsForHosts} from '../apis'
+import {getEnv} from 'src/shared/apis/env'
+import {setAutoRefresh} from 'shared/actions/app'
+import {notify as notifyAction} from 'shared/actions/notifications'
+import {generateForHosts} from 'src/utils/tempVars'
 
-export const HostsPage = React.createClass({
-  propTypes: {
-    source: PropTypes.shape({
-      id: PropTypes.string.isRequired,
-      name: PropTypes.string.isRequired,
-      type: PropTypes.string, // 'influx-enterprise'
-      links: PropTypes.shape({
-        proxy: PropTypes.string.isRequired,
-      }).isRequired,
-      telegraf: PropTypes.string.isRequired,
-    }),
-    addFlashMessage: PropTypes.func,
-  },
+import {
+  notifyUnableToGetHosts,
+  notifyUnableToGetApps,
+} from 'shared/copy/notifications'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
-  getInitialState() {
-    return {
+@ErrorHandling
+export class HostsPage extends Component {
+  constructor(props) {
+    super(props)
+
+    this.state = {
       hosts: {},
       hostsLoading: true,
       hostsError: '',
     }
-  },
+  }
 
-  componentDidMount() {
-    const {source, addFlashMessage} = this.props
-    Promise.all([
-      getCpuAndLoadForHosts(source.links.proxy, source.telegraf),
-      getMappings(),
-      new Promise(resolve => {
-        this.setState({hostsLoading: true})
-        resolve()
-      }),
-    ])
-      .then(([hosts, {data: {mappings}}]) => {
-        this.setState({
-          hosts,
-          hostsLoading: false,
-        })
-        getAppsForHosts(source.links.proxy, hosts, mappings, source.telegraf)
-          .then(newHosts => {
-            this.setState({
-              hosts: newHosts,
-              hostsError: '',
-              hostsLoading: false,
-            })
-          })
-          .catch(error => {
-            console.error(error)
-            const reason = 'Unable to get apps for hosts'
-            addFlashMessage({type: 'error', text: reason})
-            this.setState({
-              hostsError: reason,
-              hostsLoading: false,
-            })
-          })
+  async fetchHostsData() {
+    const {source, links, notify} = this.props
+    const {telegrafSystemInterval} = await getEnv(links.environment)
+    const hostsError = notifyUnableToGetHosts().message
+    const tempVars = generateForHosts(source)
+
+    try {
+      const hosts = await getCpuAndLoadForHosts(
+        source.links.proxy,
+        source.telegraf,
+        telegrafSystemInterval,
+        tempVars
+      )
+      if (!hosts) {
+        throw new Error(hostsError)
+      }
+      const newHosts = await getAppsForHosts(
+        source.links.proxy,
+        hosts,
+        this.layouts,
+        source.telegraf
+      )
+
+      this.setState({
+        hosts: newHosts,
+        hostsError: '',
+        hostsLoading: false,
       })
-      .catch(reason => {
-        this.setState({
-          hostsError: reason.toString(),
-          hostsLoading: false,
-        })
-        // TODO: this isn't reachable at the moment, because getCpuAndLoadForHosts doesn't fail when it should.
-        // (like with a bogus proxy link). We should provide better messaging to the user in this catch after that's fixed.
-        console.error(reason) // eslint-disable-line no-console
+    } catch (error) {
+      console.error(error)
+      notify(notifyUnableToGetHosts())
+      this.setState({
+        hostsError,
+        hostsLoading: false,
       })
-  },
+    }
+  }
+
+  async componentDidMount() {
+    const {notify, autoRefresh} = this.props
+
+    this.setState({hostsLoading: true}) // Only print this once
+    const results = await getLayouts()
+    const data = _.get(results, 'data')
+    this.layouts = data && data.layouts
+    if (!this.layouts) {
+      const layoutError = notifyUnableToGetApps().message
+      notify(notifyUnableToGetApps())
+      this.setState({
+        hostsError: layoutError,
+        hostsLoading: false,
+      })
+      return
+    }
+    await this.fetchHostsData()
+    if (autoRefresh) {
+      this.intervalID = setInterval(() => this.fetchHostsData(), autoRefresh)
+    }
+  }
+
+  componentWillReceiveProps(nextProps) {
+    if (this.props.manualRefresh !== nextProps.manualRefresh) {
+      this.fetchHostsData()
+    }
+    if (this.props.autoRefresh !== nextProps.autoRefresh) {
+      clearInterval(this.intervalID)
+
+      if (nextProps.autoRefresh) {
+        this.intervalID = setInterval(
+          () => this.fetchHostsData(),
+          nextProps.autoRefresh
+        )
+      }
+    }
+  }
 
   render() {
-    const {source} = this.props
+    const {
+      source,
+      autoRefresh,
+      onChooseAutoRefresh,
+      onManualRefresh,
+    } = this.props
     const {hosts, hostsLoading, hostsError} = this.state
     return (
-      <div className="page">
+      <div className="page hosts-list-page">
         <div className="page-header">
           <div className="page-header__container">
             <div className="page-header__left">
@@ -85,10 +126,16 @@ export const HostsPage = React.createClass({
             </div>
             <div className="page-header__right">
               <SourceIndicator />
+              <AutoRefreshDropdown
+                iconName="refresh"
+                selected={autoRefresh}
+                onChoose={onChooseAutoRefresh}
+                onManualRefresh={onManualRefresh}
+              />
             </div>
           </div>
         </div>
-        <FancyScrollbar className="page-contents">
+        <div className="page-contents">
           <div className="container-fluid">
             <div className="row">
               <div className="col-md-12">
@@ -101,10 +148,61 @@ export const HostsPage = React.createClass({
               </div>
             </div>
           </div>
-        </FancyScrollbar>
+        </div>
       </div>
     )
-  },
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.intervalID)
+    this.intervalID = false
+  }
+}
+
+const {func, shape, string, number} = PropTypes
+
+const mapStateToProps = state => {
+  const {
+    app: {
+      persisted: {autoRefresh},
+    },
+    links,
+  } = state
+  return {
+    links,
+    autoRefresh,
+  }
+}
+
+HostsPage.propTypes = {
+  source: shape({
+    id: string.isRequired,
+    name: string.isRequired,
+    type: string, // 'influx-enterprise'
+    links: shape({
+      proxy: string.isRequired,
+    }).isRequired,
+    telegraf: string.isRequired,
+  }),
+  links: shape({
+    environment: string.isRequired,
+  }),
+  autoRefresh: number.isRequired,
+  manualRefresh: number,
+  onChooseAutoRefresh: func.isRequired,
+  onManualRefresh: func.isRequired,
+  notify: func.isRequired,
+}
+
+HostsPage.defaultProps = {
+  manualRefresh: 0,
+}
+
+const mapDispatchToProps = dispatch => ({
+  onChooseAutoRefresh: bindActionCreators(setAutoRefresh, dispatch),
+  notify: bindActionCreators(notifyAction, dispatch),
 })
 
-export default HostsPage
+export default connect(mapStateToProps, mapDispatchToProps)(
+  ManualRefresh(HostsPage)
+)

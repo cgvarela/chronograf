@@ -1,30 +1,33 @@
-import React, {PropTypes} from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
 import classnames from 'classnames'
 
-import TemplateControlBar from 'src/dashboards/components/TemplateControlBar'
 import LayoutRenderer from 'shared/components/LayoutRenderer'
 import FancyScrollbar from 'shared/components/FancyScrollbar'
+import DashboardEmpty from 'src/dashboards/components/DashboardEmpty'
 
 const Dashboard = ({
   source,
   sources,
   onZoom,
   dashboard,
-  onAddCell,
   timeRange,
   autoRefresh,
+  manualRefresh,
   onDeleteCell,
-  synchronizer,
+  onCloneCell,
   onPositionChange,
   inPresentationMode,
-  onOpenTemplateManager,
   templatesIncludingDashTime,
   onSummonOverlayTechnologies,
-  onSelectTemplate,
-  showTemplateControlBar,
+  setScrollTop,
+  inView,
 }) => {
   const cells = dashboard.cells.map(cell => {
-    const dashboardCell = {...cell}
+    const dashboardCell = {
+      ...cell,
+      inView: inView(cell),
+    }
     dashboardCell.queries = dashboardCell.queries.map(q => ({
       ...q,
       database: q.db,
@@ -38,37 +41,28 @@ const Dashboard = ({
       className={classnames('page-contents', {
         'presentation-mode': inPresentationMode,
       })}
+      setScrollTop={setScrollTop}
     >
       <div className="dashboard container-fluid full-width">
-        {inPresentationMode
-          ? null
-          : <TemplateControlBar
-              templates={dashboard.templates}
-              onSelectTemplate={onSelectTemplate}
-              onOpenTemplateManager={onOpenTemplateManager}
-              isOpen={showTemplateControlBar}
-            />}
-        {cells.length
-          ? <LayoutRenderer
-              cells={cells}
-              onZoom={onZoom}
-              source={source}
-              sources={sources}
-              isEditable={true}
-              timeRange={timeRange}
-              autoRefresh={autoRefresh}
-              synchronizer={synchronizer}
-              onDeleteCell={onDeleteCell}
-              onPositionChange={onPositionChange}
-              templates={templatesIncludingDashTime}
-              onSummonOverlayTechnologies={onSummonOverlayTechnologies}
-            />
-          : <div className="dashboard__empty">
-              <p>This Dashboard has no Cells</p>
-              <button className="btn btn-primary btn-m" onClick={onAddCell}>
-                <span className="icon plus" />Add a Cell
-              </button>
-            </div>}
+        {cells.length ? (
+          <LayoutRenderer
+            cells={cells}
+            onZoom={onZoom}
+            source={source}
+            sources={sources}
+            isEditable={true}
+            timeRange={timeRange}
+            autoRefresh={autoRefresh}
+            manualRefresh={manualRefresh}
+            onDeleteCell={onDeleteCell}
+            onCloneCell={onCloneCell}
+            onPositionChange={onPositionChange}
+            templates={templatesIncludingDashTime}
+            onSummonOverlayTechnologies={onSummonOverlayTechnologies}
+          />
+        ) : (
+          <DashboardEmpty dashboard={dashboard} />
+        )}
       </div>
     </FancyScrollbar>
   )
@@ -99,11 +93,10 @@ Dashboard.propTypes = {
   }),
   templatesIncludingDashTime: arrayOf(shape()).isRequired,
   inPresentationMode: bool,
-  onAddCell: func,
   onPositionChange: func,
   onDeleteCell: func,
+  onCloneCell: func,
   onSummonOverlayTechnologies: func,
-  synchronizer: func,
   source: shape({
     links: shape({
       proxy: string,
@@ -111,11 +104,11 @@ Dashboard.propTypes = {
   }).isRequired,
   sources: arrayOf(shape({})).isRequired,
   autoRefresh: number.isRequired,
+  manualRefresh: number,
   timeRange: shape({}).isRequired,
-  onOpenTemplateManager: func.isRequired,
-  onSelectTemplate: func.isRequired,
-  showTemplateControlBar: bool,
   onZoom: func,
+  setScrollTop: func,
+  inView: func,
 }
 
 export default Dashboard

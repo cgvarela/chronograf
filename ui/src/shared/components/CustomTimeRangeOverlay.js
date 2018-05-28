@@ -1,8 +1,11 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import OnClickOutside from 'react-onclickoutside'
 
 import CustomTimeRange from 'shared/components/CustomTimeRange'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class CustomTimeRangeOverlay extends Component {
   constructor(props) {
     super(props)
@@ -13,7 +16,7 @@ class CustomTimeRangeOverlay extends Component {
   }
 
   render() {
-    const {onClose, timeRange, onApplyTimeRange} = this.props
+    const {onClose, timeRange, onApplyTimeRange, page} = this.props
 
     return (
       <div className="custom-time--overlay">
@@ -21,6 +24,7 @@ class CustomTimeRangeOverlay extends Component {
           onApplyTimeRange={onApplyTimeRange}
           timeRange={timeRange}
           onClose={onClose}
+          page={page}
         />
       </div>
     )
@@ -36,6 +40,7 @@ CustomTimeRangeOverlay.propTypes = {
     upper: string,
   }).isRequired,
   onClose: func,
+  page: string,
 }
 
 export default OnClickOutside(CustomTimeRangeOverlay)

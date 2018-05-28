@@ -1,3 +1,6 @@
+import {DEFAULT_LINE_COLORS} from 'src/shared/constants/graphColorPalettes'
+import {TEMP_VAR_DASHBOARD_TIME} from 'src/shared/constants'
+
 export const fixtureStatusPageCells = [
   {
     i: 'alerts-bar-graph',
@@ -6,11 +9,12 @@ export const fixtureStatusPageCells = [
     y: 0,
     w: 12,
     h: 4,
+    legend: {},
     name: 'Alert Events per Day – Last 30 Days',
+    colors: DEFAULT_LINE_COLORS,
     queries: [
       {
-        query:
-          'SELECT count("value") AS "count_value" FROM "chronograf"."autogen"."alerts" WHERE time > :dashboardTime: GROUP BY time(1d)',
+        query: `SELECT count("value") AS "count_value" FROM "chronograf"."autogen"."alerts" WHERE time > ${TEMP_VAR_DASHBOARD_TIME} GROUP BY time(1d)`,
         label: 'Events',
         queryConfig: {
           database: 'chronograf',
@@ -18,8 +22,15 @@ export const fixtureStatusPageCells = [
           retentionPolicy: 'autogen',
           fields: [
             {
-              field: 'value',
-              funcs: ['count'],
+              value: 'count',
+              type: 'func',
+              alias: 'count_value',
+              args: [
+                {
+                  value: 'value',
+                  type: 'field',
+                },
+              ],
             },
           ],
           tags: {},
@@ -47,6 +58,7 @@ export const fixtureStatusPageCells = [
     y: 5,
     w: 6.5,
     h: 6,
+    legend: {},
     queries: [
       {
         query: '',
@@ -73,6 +85,7 @@ export const fixtureStatusPageCells = [
     y: 5,
     w: 3,
     h: 6,
+    legend: {},
     queries: [
       {
         query: '',
@@ -99,6 +112,7 @@ export const fixtureStatusPageCells = [
     y: 5,
     w: 2.5,
     h: 6,
+    legend: {},
     queries: [
       {
         query: '',

@@ -1,75 +1,73 @@
 /* eslint-disable no-magic-numbers */
-import React, {Component, PropTypes} from 'react'
-import shallowCompare from 'react-addons-shallow-compare'
-
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
+import {connect} from 'react-redux'
 import _ from 'lodash'
-import moment from 'moment'
+import NanoDate from 'nano-date'
+import ReactResizeDetector from 'react-resize-detector'
 
 import Dygraphs from 'src/external/dygraph'
-import getRange, {getStackedRange} from 'shared/parsing/getRangeForDygraph'
 import DygraphLegend from 'src/shared/components/DygraphLegend'
-import {DISPLAY_OPTIONS} from 'src/dashboards/constants'
+import StaticLegend from 'src/shared/components/StaticLegend'
+import Annotations from 'src/shared/components/Annotations'
+import Crosshair from 'src/shared/components/Crosshair'
+
+import getRange, {getStackedRange} from 'shared/parsing/getRangeForDygraph'
+import {AXES_SCALE_OPTIONS} from 'src/dashboards/constants/cellEditor'
 import {buildDefaultYLabel} from 'shared/presenters'
 import {numberValueFormatter} from 'src/utils/formatting'
+import {NULL_HOVER_TIME} from 'src/shared/constants/tableGraph'
 import {
   OPTIONS,
   LINE_COLORS,
   LABEL_WIDTH,
   CHAR_PIXELS,
   barPlotter,
-  hasherino,
-  highlightSeriesOpts,
 } from 'src/shared/graphs/helpers'
-const {LINEAR, LOG, BASE_10, BASE_2} = DISPLAY_OPTIONS
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
-export default class Dygraph extends Component {
+import {getLineColorsHexes} from 'src/shared/constants/graphColorPalettes'
+const {LINEAR, LOG, BASE_10, BASE_2} = AXES_SCALE_OPTIONS
+
+import {colorsStringSchema} from 'shared/schemas'
+
+@ErrorHandling
+class Dygraph extends Component {
   constructor(props) {
     super(props)
     this.state = {
-      legend: {
-        x: null,
-        series: [],
-      },
-      sortType: '',
-      filterText: '',
-      isSynced: false,
-      isHidden: true,
-      isAscending: true,
-      isSnipped: false,
-      isFilterVisible: false,
-      legendArrowPosition: 'top',
+      staticLegendHeight: null,
+      isMounted: false,
     }
   }
 
   componentDidMount() {
     const {
       axes: {y, y2},
-      ruleValues,
       isGraphFilled: fillGraph,
       isBarGraph,
       options,
+      labels,
     } = this.props
 
-    const timeSeries = this.getTimeSeries()
+    const timeSeries = this.timeSeries
     const graphRef = this.graphRef
 
     let defaultOptions = {
+      ...options,
+      labels,
       fillGraph,
+      file: this.timeSeries,
+      ylabel: this.getLabel('y'),
       logscale: y.scale === LOG,
-      colors: this.getLineColors(),
-      series: this.hashColorDygraphSeries(),
-      legendFormatter: this.legendFormatter,
-      highlightCallback: this.highlightCallback,
-      unhighlightCallback: this.unhighlightCallback,
-      plugins: [new Dygraphs.Plugins.Crosshair({direction: 'vertical'})],
+      colors: this.lineColors,
+      series: this.colorDygraphSeries,
       axes: {
         y: {
-          valueRange: options.stackedGraph
-            ? getStackedRange(y.bounds)
-            : getRange(timeSeries, y.bounds, ruleValues),
+          valueRange: this.getYRange(timeSeries),
           axisLabelFormatter: (yval, __, opts) =>
             numberValueFormatter(yval, opts, y.prefix, y.suffix),
-          axisLabelWidth: this.getLabelWidth(),
+          axisLabelWidth: this.labelWidth,
           labelsKMB: y.base === BASE_10,
           labelsKMG2: y.base === BASE_2,
         },
@@ -77,35 +75,26 @@ export default class Dygraph extends Component {
           valueRange: getRange(timeSeries, y2.bounds),
         },
       },
-      highlightSeriesOpts,
       zoomCallback: (lower, upper) => this.handleZoom(lower, upper),
+      highlightCircleSize: 0,
     }
 
     if (isBarGraph) {
       defaultOptions = {
         ...defaultOptions,
         plotter: barPlotter,
-        plugins: [],
-        highlightSeriesOpts: {
-          ...highlightSeriesOpts,
-          highlightCircleSize: 0,
-        },
       }
     }
 
     this.dygraph = new Dygraphs(graphRef, timeSeries, {
       ...defaultOptions,
-      ...options,
       ...OPTIONS,
+      ...options,
     })
 
     const {w} = this.dygraph.getArea()
     this.props.setResolution(w)
-
-    // Simple opt-out for now, if a graph should not be synced
-    if (this.props.synchronizer) {
-      this.sync()
-    }
+    this.setState({isMounted: true})
   }
 
   componentWillUnmount() {
@@ -114,33 +103,37 @@ export default class Dygraph extends Component {
   }
 
   shouldComponentUpdate(nextProps, nextState) {
-    const timeRangeChanged = !_.isEqual(
-      nextProps.timeRange,
-      this.props.timeRange
-    )
-
-    if (this.dygraph.isZoomed() && timeRangeChanged) {
-      this.dygraph.resetZoom()
-    }
-
-    // Will cause componentDidUpdate to fire twice, currently. This could
-    // be reduced by returning false from within the reset conditional above,
-    // though that would be based on the assumption that props for timeRange
-    // will always change before those for data.
-    return shallowCompare(this, nextProps, nextState)
+    const arePropsEqual = _.isEqual(this.props, nextProps)
+    const areStatesEqual = _.isEqual(this.state, nextState)
+    return !arePropsEqual || !areStatesEqual
   }
 
-  componentDidUpdate() {
-    const {labels, axes: {y, y2}, options, ruleValues, isBarGraph} = this.props
+  componentDidUpdate(prevProps) {
+    const {
+      labels,
+      axes: {y, y2},
+      options,
+      isBarGraph,
+    } = this.props
 
     const dygraph = this.dygraph
+
     if (!dygraph) {
       throw new Error(
         'Dygraph not configured in time; this should not be possible!'
       )
     }
 
-    const timeSeries = this.getTimeSeries()
+    const timeSeries = this.timeSeries
+
+    const timeRangeChanged = !_.isEqual(
+      prevProps.timeRange,
+      this.props.timeRange
+    )
+
+    if (this.dygraph.isZoomed() && timeRangeChanged) {
+      this.dygraph.resetZoom()
+    }
 
     const updateOptions = {
       ...options,
@@ -150,12 +143,10 @@ export default class Dygraph extends Component {
       ylabel: this.getLabel('y'),
       axes: {
         y: {
-          valueRange: options.stackedGraph
-            ? getStackedRange(y.bounds)
-            : getRange(timeSeries, y.bounds, ruleValues),
+          valueRange: this.getYRange(timeSeries),
           axisLabelFormatter: (yval, __, opts) =>
             numberValueFormatter(yval, opts, y.prefix, y.suffix),
-          axisLabelWidth: this.getLabelWidth(),
+          axisLabelWidth: this.labelWidth,
           labelsKMB: y.base === BASE_10,
           labelsKMG2: y.base === BASE_2,
         },
@@ -163,18 +154,38 @@ export default class Dygraph extends Component {
           valueRange: getRange(timeSeries, y2.bounds),
         },
       },
-      colors: this.getLineColors(),
-      series: this.hashColorDygraphSeries(),
+      colors: this.lineColors,
+      series: this.colorDygraphSeries,
       plotter: isBarGraph ? barPlotter : null,
-      visibility: this.visibility(),
     }
 
     dygraph.updateOptions(updateOptions)
 
     const {w} = this.dygraph.getArea()
-    this.resize()
-    this.dygraph.resize()
     this.props.setResolution(w)
+    this.resize()
+  }
+
+  getYRange = timeSeries => {
+    const {
+      options,
+      axes: {y},
+      ruleValues,
+    } = this.props
+
+    if (options.stackedGraph) {
+      return getStackedRange(y.bounds)
+    }
+
+    const range = getRange(timeSeries, y.bounds, ruleValues)
+    const [min, max] = range
+
+    // Bug in Dygraph calculates a negative range for logscale when min range is 0
+    if (y.scale === LOG && timeSeries.length === 1 && min <= 0) {
+      return [0.1, max]
+    }
+
+    return range
   }
 
   handleZoom = (lower, upper) => {
@@ -187,71 +198,52 @@ export default class Dygraph extends Component {
     onZoom(this.formatTimeRange(lower), this.formatTimeRange(upper))
   }
 
-  hashColorDygraphSeries = () => {
-    const {dygraphSeries} = this.props
-    const colors = this.getLineColors()
-    const hashColorDygraphSeries = {}
+  get colorDygraphSeries() {
+    const {dygraphSeries, colors, overrideLineColors} = this.props
+    const numSeries = Object.keys(dygraphSeries).length
+    const dygraphSeriesKeys = Object.keys(dygraphSeries).sort()
+    let lineColors = getLineColorsHexes(colors, numSeries)
 
+    if (overrideLineColors) {
+      lineColors = getLineColorsHexes(overrideLineColors, numSeries)
+    }
+
+    const coloredDygraphSeries = {}
     for (const seriesName in dygraphSeries) {
       const series = dygraphSeries[seriesName]
-      const hashIndex = hasherino(seriesName, colors.length)
-      const color = colors[hashIndex]
-      hashColorDygraphSeries[seriesName] = {...series, color}
+      const color = lineColors[dygraphSeriesKeys.indexOf(seriesName)]
+
+      coloredDygraphSeries[seriesName] = {...series, color}
     }
-
-    return hashColorDygraphSeries
+    return coloredDygraphSeries
   }
 
-  sync = () => {
-    if (!this.state.isSynced) {
-      this.props.synchronizer(this.dygraph)
-      this.setState({isSynced: true})
-    }
+  eventToTimestamp = ({pageX: pxBetweenMouseAndPage}) => {
+    const {left: pxBetweenGraphAndPage} = this.graphRef.getBoundingClientRect()
+    const graphXCoordinate = pxBetweenMouseAndPage - pxBetweenGraphAndPage
+    const timestamp = this.dygraph.toDataXCoord(graphXCoordinate)
+    const [xRangeStart] = this.dygraph.xAxisRange()
+    const clamped = Math.max(xRangeStart, timestamp)
+    return `${clamped}`
   }
 
-  handleSortLegend = sortType => () => {
-    this.setState({sortType, isAscending: !this.state.isAscending})
+  handleHideLegend = () => {
+    this.props.handleSetHoverTime(NULL_HOVER_TIME)
   }
 
-  handleLegendInputChange = e => {
-    this.setState({filterText: e.target.value})
+  handleShowLegend = e => {
+    const newTime = this.eventToTimestamp(e)
+    this.props.handleSetHoverTime(newTime)
   }
 
-  handleSnipLabel = () => {
-    this.setState({isSnipped: !this.state.isSnipped})
-  }
-
-  handleToggleFilter = () => {
-    this.setState({
-      isFilterVisible: !this.state.isFilterVisible,
-      filterText: '',
-    })
-  }
-
-  handleHideLegend = e => {
-    const {top, bottom, left, right} = this.graphRef.getBoundingClientRect()
-
-    const mouseY = e.clientY
-    const mouseX = e.clientX
-
-    const mouseInGraphY = mouseY <= bottom && mouseY >= top
-    const mouseInGraphX = mouseX <= right && mouseX >= left
-    const isMouseHoveringGraph = mouseInGraphY && mouseInGraphX
-
-    if (!isMouseHoveringGraph) {
-      this.setState({isHidden: true})
-      if (!this.visibility().find(bool => bool === true)) {
-        this.setState({filterText: ''})
-      }
-    }
-  }
-
-  getLineColors = () => {
+  get lineColors() {
     return [...(this.props.overrideLineColors || LINE_COLORS)]
   }
 
-  getLabelWidth = () => {
-    const {axes: {y}} = this.props
+  get labelWidth() {
+    const {
+      axes: {y},
+    } = this.props
     return (
       LABEL_WIDTH +
       y.prefix.length * CHAR_PIXELS +
@@ -259,23 +251,7 @@ export default class Dygraph extends Component {
     )
   }
 
-  visibility = () => {
-    const timeSeries = this.getTimeSeries()
-    const {filterText, legend} = this.state
-    const series = _.get(timeSeries, '0', [])
-    const numSeries = series.length
-    return Array(numSeries ? numSeries - 1 : numSeries)
-      .fill(true)
-      .map((s, i) => {
-        if (!legend.series[i]) {
-          return true
-        }
-
-        return !!legend.series[i].label.match(filterText)
-      })
-  }
-
-  getTimeSeries = () => {
+  get timeSeries() {
     const {timeSeries} = this.props
     // Avoid 'Can't plot empty data set' errors by falling back to a
     // default dataset that's valid for Dygraph.
@@ -294,178 +270,101 @@ export default class Dygraph extends Component {
     return buildDefaultYLabel(queryConfig)
   }
 
-  handleLegendRef = el => (this.legendRef = el)
-
   resize = () => {
     this.dygraph.resizeElements_()
     this.dygraph.predraw_()
+    this.dygraph.resize()
   }
 
   formatTimeRange = timeRange => {
     if (!timeRange) {
       return ''
     }
-
-    return moment(timeRange).utc().format()
+    const date = new NanoDate(timeRange)
+    return date.toISOString()
   }
 
-  deselectCrosshair = () => {
-    const plugins = this.dygraph.plugins_
-    const crosshair = plugins.find(
-      ({plugin}) => plugin.toString() === 'Crosshair Plugin'
-    )
-
-    if (!crosshair || this.props.isBarGraph) {
-      return
-    }
-
-    crosshair.plugin.deselect()
+  handleReceiveStaticLegendHeight = staticLegendHeight => {
+    this.setState({staticLegendHeight})
   }
 
-  unhighlightCallback = e => {
-    const {top, bottom, left, right} = this.legendRef.getBoundingClientRect()
-
-    const mouseY = e.clientY
-    const mouseX = e.clientX
-
-    const mouseBuffer = 5
-    const mouseInLegendY = mouseY <= bottom && mouseY >= top - mouseBuffer
-    const mouseInLegendX = mouseX <= right && mouseX >= left
-    const isMouseHoveringLegend = mouseInLegendY && mouseInLegendX
-
-    if (!isMouseHoveringLegend) {
-      this.setState({isHidden: true})
-
-      if (!this.visibility().find(bool => bool === true)) {
-        this.setState({filterText: ''})
-      }
-    }
-  }
-
-  highlightCallback = e => {
-    const chronografChromeSize = 60 // Width & Height of navigation page elements
-
-    // Move the Legend on hover
-    const graphRect = this.graphRef.getBoundingClientRect()
-    const legendRect = this.legendRef.getBoundingClientRect()
-
-    const graphWidth = graphRect.width + 32 // Factoring in padding from parent
-    const graphHeight = graphRect.height
-    const graphBottom = graphRect.bottom
-    const legendWidth = legendRect.width
-    const legendHeight = legendRect.height
-    const screenHeight = window.innerHeight
-    const legendMaxLeft = graphWidth - legendWidth / 2
-    const trueGraphX = e.pageX - graphRect.left
-
-    let legendLeft = trueGraphX
-
-    // Enforcing max & min legend offsets
-    if (trueGraphX < legendWidth / 2) {
-      legendLeft = legendWidth / 2
-    } else if (trueGraphX > legendMaxLeft) {
-      legendLeft = legendMaxLeft
+  get areAnnotationsVisible() {
+    if (!this.dygraph) {
+      return false
     }
 
-    // Disallow screen overflow of legend
-    const isLegendBottomClipped = graphBottom + legendHeight > screenHeight
-    const isLegendTopClipped =
-      legendHeight > graphRect.top - chronografChromeSize
-    const willLegendFitLeft = e.pageX - chronografChromeSize > legendWidth
-
-    let legendTop = graphHeight + 8
-    this.setState({legendArrowPosition: 'top'})
-
-    // If legend is only clipped on the bottom, position above graph
-    if (isLegendBottomClipped && !isLegendTopClipped) {
-      this.setState({legendArrowPosition: 'bottom'})
-      legendTop = -legendHeight
-    }
-    // If legend is clipped on top and bottom, posiition on either side of crosshair
-    if (isLegendBottomClipped && isLegendTopClipped) {
-      legendTop = 0
-
-      if (willLegendFitLeft) {
-        this.setState({legendArrowPosition: 'right'})
-        legendLeft = trueGraphX - legendWidth / 2
-        legendLeft -= 8
-      } else {
-        this.setState({legendArrowPosition: 'left'})
-        legendLeft = trueGraphX + legendWidth / 2
-        legendLeft += 32
-      }
-    }
-
-    this.legendRef.style.left = `${legendLeft}px`
-    this.legendRef.style.top = `${legendTop}px`
-
-    this.setState({isHidden: false})
-  }
-
-  legendFormatter = legend => {
-    if (!legend.x) {
-      return ''
-    }
-
-    const {state: {legend: prevLegend}} = this
-    const highlighted = legend.series.find(s => s.isHighlighted)
-    const prevHighlighted = prevLegend.series.find(s => s.isHighlighted)
-
-    const yVal = highlighted && highlighted.y
-    const prevY = prevHighlighted && prevHighlighted.y
-
-    if (legend.x === prevLegend.x && yVal === prevY) {
-      return ''
-    }
-
-    this.setState({legend})
-    return ''
+    const [start, end] = this.dygraph && this.dygraph.xAxisRange()
+    return !!start && !!end
   }
 
   render() {
-    const {
-      legend,
-      sortType,
-      isHidden,
-      isSnipped,
-      filterText,
-      isAscending,
-      legendArrowPosition,
-      isFilterVisible,
-    } = this.state
+    const {staticLegendHeight} = this.state
+    const {staticLegend, children, cellID} = this.props
+    const nestedGraph = (children && children.length && children[0]) || children
+    let dygraphStyle = {...this.props.containerStyle, zIndex: '2'}
+    if (staticLegend) {
+      const cellVerticalPadding = 16
+
+      dygraphStyle = {
+        ...this.props.containerStyle,
+        zIndex: '2',
+        height: `calc(100% - ${staticLegendHeight + cellVerticalPadding}px)`,
+      }
+    }
 
     return (
-      <div className="dygraph-child" onMouseLeave={this.deselectCrosshair}>
-        <DygraphLegend
-          {...legend}
-          sortType={sortType}
-          onHide={this.handleHideLegend}
-          isHidden={isHidden}
-          isFilterVisible={isFilterVisible}
-          isSnipped={isSnipped}
-          filterText={filterText}
-          isAscending={isAscending}
-          onSnip={this.handleSnipLabel}
-          onSort={this.handleSortLegend}
-          legendRef={this.handleLegendRef}
-          onToggleFilter={this.handleToggleFilter}
-          onInputChange={this.handleLegendInputChange}
-          arrowPosition={legendArrowPosition}
-        />
+      <div className="dygraph-child">
+        {this.dygraph && (
+          <div className="dygraph-addons">
+            {this.areAnnotationsVisible && (
+              <Annotations
+                dygraph={this.dygraph}
+                dWidth={this.dygraph.width_}
+                staticLegendHeight={staticLegendHeight}
+              />
+            )}
+            <DygraphLegend
+              cellID={cellID}
+              dygraph={this.dygraph}
+              onHide={this.handleHideLegend}
+              onShow={this.handleShowLegend}
+            />
+            <Crosshair
+              dygraph={this.dygraph}
+              staticLegendHeight={staticLegendHeight}
+            />
+          </div>
+        )}
         <div
+          onMouseEnter={this.handleShowLegend}
           ref={r => {
             this.graphRef = r
             this.props.dygraphRef(r)
           }}
           className="dygraph-child-container"
-          style={this.props.containerStyle}
+          style={dygraphStyle}
+        />
+        {staticLegend && (
+          <StaticLegend
+            dygraphSeries={this.colorDygraphSeries}
+            dygraph={this.dygraph}
+            handleReceiveStaticLegendHeight={
+              this.handleReceiveStaticLegendHeight
+            }
+          />
+        )}
+        {nestedGraph && React.cloneElement(nestedGraph, {staticLegendHeight})}
+        <ReactResizeDetector
+          handleWidth={true}
+          handleHeight={true}
+          onResize={this.resize}
         />
       </div>
     )
   }
 }
 
-const {array, arrayOf, bool, func, shape, string} = PropTypes
+const {array, arrayOf, bool, func, node, shape, string} = PropTypes
 
 Dygraph.defaultProps = {
   axes: {
@@ -487,9 +386,15 @@ Dygraph.defaultProps = {
   overrideLineColors: null,
   dygraphRef: () => {},
   onZoom: () => {},
+  handleSetHoverTime: () => {},
+  staticLegend: {
+    type: null,
+  },
 }
 
 Dygraph.propTypes = {
+  cellID: string,
+  handleSetHoverTime: func,
   axes: shape({
     y: shape({
       bounds: array,
@@ -505,7 +410,13 @@ Dygraph.propTypes = {
   containerStyle: shape({}),
   isGraphFilled: bool,
   isBarGraph: bool,
-  overrideLineColors: array,
+  staticLegend: bool,
+  overrideLineColors: arrayOf(
+    shape({
+      type: string.isRequired,
+      hex: string.isRequired,
+    }).isRequired
+  ),
   dygraphSeries: shape({}).isRequired,
   ruleValues: shape({
     operator: string,
@@ -515,8 +426,16 @@ Dygraph.propTypes = {
   timeRange: shape({
     lower: string.isRequired,
   }),
-  synchronizer: func,
   setResolution: func,
   dygraphRef: func,
   onZoom: func,
+  mode: string,
+  children: node,
+  colors: colorsStringSchema.isRequired,
 }
+
+const mapStateToProps = ({annotations: {mode}}) => ({
+  mode,
+})
+
+export default connect(mapStateToProps, null)(Dygraph)

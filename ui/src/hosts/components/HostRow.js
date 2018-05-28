@@ -1,10 +1,13 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import shallowCompare from 'react-addons-shallow-compare'
 import {Link} from 'react-router'
 import classnames from 'classnames'
 
 import {HOSTS_TABLE} from 'src/hosts/constants/tableSizing'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class HostRow extends Component {
   constructor(props) {
     super(props)
@@ -20,13 +23,11 @@ class HostRow extends Component {
     const {colName, colStatus, colCPU, colLoad} = HOSTS_TABLE
 
     return (
-      <tr>
-        <td style={{width: colName}}>
-          <Link to={`/sources/${source.id}/hosts/${name}`}>
-            {name}
-          </Link>
-        </td>
-        <td style={{width: colStatus}}>
+      <div className="hosts-table--tr">
+        <div className="hosts-table--td" style={{width: colName}}>
+          <Link to={`/sources/${source.id}/hosts/${name}`}>{name}</Link>
+        </div>
+        <div className="hosts-table--td" style={{width: colStatus}}>
           <div
             className={classnames(
               'table-dot',
@@ -35,14 +36,14 @@ class HostRow extends Component {
                 : 'dot-critical'
             )}
           />
-        </td>
-        <td style={{width: colCPU}} className="monotype">
+        </div>
+        <div style={{width: colCPU}} className="monotype hosts-table--td">
           {isNaN(cpu) ? 'N/A' : `${cpu.toFixed(2)}%`}
-        </td>
-        <td style={{width: colLoad}} className="monotype">
+        </div>
+        <div style={{width: colLoad}} className="monotype hosts-table--td">
           {isNaN(load) ? 'N/A' : `${load.toFixed(2)}`}
-        </td>
-        <td>
+        </div>
+        <div className="hosts-table--td">
           {apps.map((app, index) => {
             return (
               <span key={app}>
@@ -59,8 +60,8 @@ class HostRow extends Component {
               </span>
             )
           })}
-        </td>
-      </tr>
+        </div>
+      </div>
     )
   }
 }

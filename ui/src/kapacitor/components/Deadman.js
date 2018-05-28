@@ -1,4 +1,5 @@
-import React, {PropTypes} from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
 import {PERIODS} from 'src/kapacitor/constants'
 import Dropdown from 'shared/components/Dropdown'
 
@@ -6,8 +7,8 @@ const periods = PERIODS.map(text => {
   return {text}
 })
 
-const Deadman = ({rule, onChange}) =>
-  <div className="rule-section--row">
+const Deadman = ({rule, onChange}) => (
+  <div className="rule-section--row rule-section--row-first rule-section--row-last">
     <p>Send Alert if Data is missing for</p>
     <Dropdown
       className="dropdown-80"
@@ -17,6 +18,7 @@ const Deadman = ({rule, onChange}) =>
       onChoose={onChange}
     />
   </div>
+)
 
 const {shape, string, func} = PropTypes
 

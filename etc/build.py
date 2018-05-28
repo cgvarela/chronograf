@@ -24,6 +24,7 @@ DATA_DIR = "/var/lib/chronograf"
 SCRIPT_DIR = "/usr/lib/chronograf/scripts"
 LOGROTATE_DIR = "/etc/logrotate.d"
 CANNED_DIR = "/usr/share/chronograf/canned"
+RESOURCES_DIR = "/usr/share/chronograf/resources"
 
 INIT_SCRIPT = "etc/scripts/init.sh"
 SYSTEMD_SCRIPT = "etc/scripts/chronograf.service"
@@ -74,6 +75,7 @@ for f in CONFIGURATION_FILES:
 
 targets = {
     'chronograf' : './cmd/chronograf',
+    'chronoctl' : './cmd/chronoctl',
 }
 
 supported_builds = {
@@ -115,7 +117,8 @@ def create_package_fs(build_root):
         DATA_DIR[1:],
         SCRIPT_DIR[1:],
         LOGROTATE_DIR[1:],
-        CANNED_DIR[1:]
+        CANNED_DIR[1:],
+        RESOURCES_DIR[1:]
     ]
     for d in dirs:
         os.makedirs(os.path.join(build_root, d))
@@ -674,7 +677,7 @@ def package(build_output, pkg_name, version, nightly=False, iteration=1, static=
                             package_build_root,
                             current_location)
                         if package_type == "rpm":
-                            fpm_command += "--depends coreutils"
+                            fpm_command += "--depends coreutils --depends shadow-utils"
                         # TODO: Check for changelog
                         # elif package_type == "deb":
                         #     fpm_command += "--deb-changelog {} ".format(os.path.join(os.getcwd(), "CHANGELOG.md"))

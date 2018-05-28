@@ -1,16 +1,16 @@
-import React, {Component, PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 
 import {USERS_TABLE} from 'src/admin/constants/tableSizing'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class UserEditName extends Component {
   constructor(props) {
     super(props)
-
-    this.handleKeyPress = ::this.handleKeyPress
-    this.handleEdit = ::this.handleEdit
   }
 
-  handleKeyPress(user) {
+  handleKeyPress = user => {
     return e => {
       if (e.key === 'Enter') {
         this.props.onSave(user)
@@ -18,7 +18,7 @@ class UserEditName extends Component {
     }
   }
 
-  handleEdit(user) {
+  handleEdit = user => {
     return e => {
       this.props.onEdit(user, {[e.target.name]: e.target.value})
     }
@@ -38,7 +38,7 @@ class UserEditName extends Component {
           onKeyPress={this.handleKeyPress(user)}
           autoFocus={true}
           spellCheck={false}
-          autoComplete={false}
+          autoComplete="false"
         />
       </td>
     )

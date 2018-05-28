@@ -76,12 +76,13 @@ func TestMarshalSourceWithSecret(t *testing.T) {
 
 func TestMarshalServer(t *testing.T) {
 	v := chronograf.Server{
-		ID:       12,
-		SrcID:    2,
-		Name:     "Fountain of Truth",
-		Username: "docbrown",
-		Password: "1 point twenty-one g1g@w@tts",
-		URL:      "http://oldmanpeabody.mall.io:9092",
+		ID:                 12,
+		SrcID:              2,
+		Name:               "Fountain of Truth",
+		Username:           "docbrown",
+		Password:           "1 point twenty-one g1g@w@tts",
+		URL:                "http://oldmanpeabody.mall.io:9092",
+		InsecureSkipVerify: true,
 	}
 
 	var vv chronograf.Server
@@ -163,6 +164,7 @@ func Test_MarshalDashboard(t *testing.T) {
 							Upper: int64(100),
 						},
 						Source: "/chronograf/v1/sources/1",
+						Shifts: []chronograf.TimeShift{},
 					},
 				},
 				Axes: map[string]chronograf.Axis{
@@ -176,6 +178,25 @@ func Test_MarshalDashboard(t *testing.T) {
 					},
 				},
 				Type: "line",
+				CellColors: []chronograf.CellColor{
+					{
+						ID:    "myid",
+						Type:  "min",
+						Hex:   "#234567",
+						Name:  "Laser",
+						Value: "0",
+					},
+					{
+						ID:    "id2",
+						Type:  "max",
+						Hex:   "#876543",
+						Name:  "Solitude",
+						Value: "100",
+					},
+				},
+				TableOptions: chronograf.TableOptions{},
+				FieldOptions: []chronograf.RenamableField{},
+				TimeFormat:   "",
 			},
 		},
 		Templates: []chronograf.Template{},
@@ -210,6 +231,7 @@ func Test_MarshalDashboard_WithLegacyBounds(t *testing.T) {
 						Range: &chronograf.Range{
 							Upper: int64(100),
 						},
+						Shifts: []chronograf.TimeShift{},
 					},
 				},
 				Axes: map[string]chronograf.Axis{
@@ -217,7 +239,30 @@ func Test_MarshalDashboard_WithLegacyBounds(t *testing.T) {
 						LegacyBounds: [2]int64{0, 5},
 					},
 				},
-				Type: "line",
+				CellColors: []chronograf.CellColor{
+					{
+						ID:    "myid",
+						Type:  "min",
+						Hex:   "#234567",
+						Name:  "Laser",
+						Value: "0",
+					},
+					{
+						ID:    "id2",
+						Type:  "max",
+						Hex:   "#876543",
+						Name:  "Solitude",
+						Value: "100",
+					},
+				},
+				Legend: chronograf.Legend{
+					Type:        "static",
+					Orientation: "bottom",
+				},
+				TableOptions: chronograf.TableOptions{},
+				TimeFormat:   "MM:DD:YYYY",
+				FieldOptions: []chronograf.RenamableField{},
+				Type:         "line",
 			},
 		},
 		Templates: []chronograf.Template{},
@@ -241,6 +286,7 @@ func Test_MarshalDashboard_WithLegacyBounds(t *testing.T) {
 						Range: &chronograf.Range{
 							Upper: int64(100),
 						},
+						Shifts: []chronograf.TimeShift{},
 					},
 				},
 				Axes: map[string]chronograf.Axis{
@@ -250,7 +296,30 @@ func Test_MarshalDashboard_WithLegacyBounds(t *testing.T) {
 						Scale:  "linear",
 					},
 				},
-				Type: "line",
+				CellColors: []chronograf.CellColor{
+					{
+						ID:    "myid",
+						Type:  "min",
+						Hex:   "#234567",
+						Name:  "Laser",
+						Value: "0",
+					},
+					{
+						ID:    "id2",
+						Type:  "max",
+						Hex:   "#876543",
+						Name:  "Solitude",
+						Value: "100",
+					},
+				},
+				Legend: chronograf.Legend{
+					Type:        "static",
+					Orientation: "bottom",
+				},
+				TableOptions: chronograf.TableOptions{},
+				FieldOptions: []chronograf.RenamableField{},
+				TimeFormat:   "MM:DD:YYYY",
+				Type:         "line",
 			},
 		},
 		Templates: []chronograf.Template{},
@@ -285,6 +354,7 @@ func Test_MarshalDashboard_WithEmptyLegacyBounds(t *testing.T) {
 						Range: &chronograf.Range{
 							Upper: int64(100),
 						},
+						Shifts: []chronograf.TimeShift{},
 					},
 				},
 				Axes: map[string]chronograf.Axis{
@@ -292,7 +362,26 @@ func Test_MarshalDashboard_WithEmptyLegacyBounds(t *testing.T) {
 						LegacyBounds: [2]int64{},
 					},
 				},
-				Type: "line",
+				CellColors: []chronograf.CellColor{
+					{
+						ID:    "myid",
+						Type:  "min",
+						Hex:   "#234567",
+						Name:  "Laser",
+						Value: "0",
+					},
+					{
+						ID:    "id2",
+						Type:  "max",
+						Hex:   "#876543",
+						Name:  "Solitude",
+						Value: "100",
+					},
+				},
+				Type:         "line",
+				TableOptions: chronograf.TableOptions{},
+				FieldOptions: []chronograf.RenamableField{},
+				TimeFormat:   "MM:DD:YYYY",
 			},
 		},
 		Templates: []chronograf.Template{},
@@ -316,6 +405,7 @@ func Test_MarshalDashboard_WithEmptyLegacyBounds(t *testing.T) {
 						Range: &chronograf.Range{
 							Upper: int64(100),
 						},
+						Shifts: []chronograf.TimeShift{},
 					},
 				},
 				Axes: map[string]chronograf.Axis{
@@ -325,11 +415,66 @@ func Test_MarshalDashboard_WithEmptyLegacyBounds(t *testing.T) {
 						Scale:  "linear",
 					},
 				},
-				Type: "line",
+				CellColors: []chronograf.CellColor{
+					{
+						ID:    "myid",
+						Type:  "min",
+						Hex:   "#234567",
+						Name:  "Laser",
+						Value: "0",
+					},
+					{
+						ID:    "id2",
+						Type:  "max",
+						Hex:   "#876543",
+						Name:  "Solitude",
+						Value: "100",
+					},
+				},
+				TableOptions: chronograf.TableOptions{},
+				FieldOptions: []chronograf.RenamableField{},
+				TimeFormat:   "MM:DD:YYYY",
+				Type:         "line",
 			},
 		},
 		Templates: []chronograf.Template{},
 		Name:      "Dashboard",
+	}
+
+	var actual chronograf.Dashboard
+	if buf, err := internal.MarshalDashboard(dashboard); err != nil {
+		t.Fatal("Error marshaling dashboard: err", err)
+	} else if err := internal.UnmarshalDashboard(buf, &actual); err != nil {
+		t.Fatal("Error unmarshaling dashboard: err:", err)
+	} else if !cmp.Equal(expected, actual) {
+		t.Fatalf("Dashboard protobuf copy error: diff follows:\n%s", cmp.Diff(expected, actual))
+	}
+}
+
+func Test_MarshalDashboard_WithEmptyCellType(t *testing.T) {
+	dashboard := chronograf.Dashboard{
+		ID: 1,
+		Cells: []chronograf.DashboardCell{
+			{
+				ID: "9b5367de-c552-4322-a9e8-7f384cbd235c",
+			},
+		},
+	}
+
+	expected := chronograf.Dashboard{
+		ID: 1,
+		Cells: []chronograf.DashboardCell{
+			{
+				ID:           "9b5367de-c552-4322-a9e8-7f384cbd235c",
+				Type:         "line",
+				Queries:      []chronograf.DashboardQuery{},
+				Axes:         map[string]chronograf.Axis{},
+				CellColors:   []chronograf.CellColor{},
+				TableOptions: chronograf.TableOptions{},
+				FieldOptions: []chronograf.RenamableField{},
+			},
+		},
+		Templates: []chronograf.Template{},
 	}
 
 	var actual chronograf.Dashboard

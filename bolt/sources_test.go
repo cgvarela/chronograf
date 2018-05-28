@@ -15,28 +15,29 @@ func TestSourceStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Open(context.TODO()); err != nil {
-		t.Fatal(err)
-	}
 	defer c.Close()
+
 	s := c.SourcesStore
 
 	srcs := []chronograf.Source{
 		chronograf.Source{
-			Name:     "Of Truth",
-			Type:     "influx",
-			Username: "marty",
-			Password: "I❤️  jennifer parker",
-			URL:      "toyota-hilux.lyon-estates.local",
-			Default:  true,
+			Name:         "Of Truth",
+			Type:         "influx",
+			Username:     "marty",
+			Password:     "I❤️  jennifer parker",
+			URL:          "toyota-hilux.lyon-estates.local",
+			Default:      true,
+			Organization: "1337",
+			DefaultRP:    "pineapple",
 		},
 		chronograf.Source{
-			Name:     "HipToBeSquare",
-			Type:     "influx",
-			Username: "calvinklein",
-			Password: "chuck b3rry",
-			URL:      "toyota-hilux.lyon-estates.local",
-			Default:  true,
+			Name:         "HipToBeSquare",
+			Type:         "influx",
+			Username:     "calvinklein",
+			Password:     "chuck b3rry",
+			URL:          "toyota-hilux.lyon-estates.local",
+			Default:      true,
+			Organization: "1337",
 		},
 		chronograf.Source{
 			Name:               "HipToBeSquare",
@@ -46,6 +47,7 @@ func TestSourceStore(t *testing.T) {
 			URL:                "https://toyota-hilux.lyon-estates.local",
 			InsecureSkipVerify: true,
 			Default:            false,
+			Organization:       "1337",
 		},
 	}
 
@@ -66,8 +68,10 @@ func TestSourceStore(t *testing.T) {
 	// Update source.
 	srcs[0].Username = "calvinklein"
 	srcs[1].Name = "Enchantment Under the Sea Dance"
+	srcs[2].DefaultRP = "cubeapple"
 	mustUpdateSource(t, s, srcs[0])
 	mustUpdateSource(t, s, srcs[1])
+	mustUpdateSource(t, s, srcs[2])
 
 	// Confirm sources have updated.
 	if src, err := s.Get(ctx, srcs[0].ID); err != nil {
@@ -79,6 +83,11 @@ func TestSourceStore(t *testing.T) {
 		t.Fatal(err)
 	} else if src.Name != "Enchantment Under the Sea Dance" {
 		t.Fatalf("source 1 update error: got %v, expected %v", src.Name, "Enchantment Under the Sea Dance")
+	}
+	if src, err := s.Get(ctx, srcs[2].ID); err != nil {
+		t.Fatal(err)
+	} else if src.DefaultRP != "cubeapple" {
+		t.Fatalf("source 2 update error: got %v, expected %v", src.DefaultRP, "cubeapple")
 	}
 
 	// Attempt to make two default sources
@@ -95,12 +104,13 @@ func TestSourceStore(t *testing.T) {
 
 	// Attempt to add a new default source
 	srcs = append(srcs, chronograf.Source{
-		Name:     "Biff Tannen",
-		Type:     "influx",
-		Username: "HELLO",
-		Password: "MCFLY",
-		URL:      "anybody.in.there.local",
-		Default:  true,
+		Name:         "Biff Tannen",
+		Type:         "influx",
+		Username:     "HELLO",
+		Password:     "MCFLY",
+		URL:          "anybody.in.there.local",
+		Default:      true,
+		Organization: "1892",
 	})
 
 	srcs[3] = mustAddSource(t, s, srcs[3])
@@ -153,12 +163,13 @@ func TestSourceStore(t *testing.T) {
 	// Try to add one source as a non-default and ensure that it becomes a
 	// default
 	src := mustAddSource(t, s, chronograf.Source{
-		Name:     "Biff Tannen",
-		Type:     "influx",
-		Username: "HELLO",
-		Password: "MCFLY",
-		URL:      "anybody.in.there.local",
-		Default:  false,
+		Name:         "Biff Tannen",
+		Type:         "influx",
+		Username:     "HELLO",
+		Password:     "MCFLY",
+		URL:          "anybody.in.there.local",
+		Default:      false,
+		Organization: "1234",
 	})
 
 	if actual, err := s.Get(ctx, src.ID); err != nil {

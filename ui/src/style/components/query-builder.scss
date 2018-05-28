@@ -98,6 +98,20 @@
     white-space: nowrap;
     margin-right: 8px;
   }
+  /* Disabled State */
+  &.disabled {
+    font-style: italic;
+    color: $query-builder--list-item-text-disabled;
+
+    &:hover {
+      cursor: default;
+      background-color: $query-builder--list-item-bg;
+    }
+    
+    &.active {
+      background-color: $query-builder--list-item-bg-active;
+    }
+  }
 }
 /* Filter Element */
 .query-builder--filter {
@@ -105,8 +119,8 @@
   display: flex;
 
   & > span {
-    font-size: 11px;
-    line-height: 28px;
+    font-size: 12px;
+    line-height: 30px;
     order: 1;
     width: 20px;
     margin-right: -20px;
@@ -156,6 +170,10 @@
     border-radius: 50%;
     transition: transform 0.25s ease, opacity 0.25s ease;
   }
+
+  .disabled &:after {
+    background-color: $g5-pepper;
+  }
 }
 .query-builder--list-item.active .query-builder--checkbox:after {
   opacity: 1;
@@ -198,7 +216,8 @@
   }
 }
 .query-builder--list-item:hover .group-by-tag,
-.query-builder--list-item.active .group-by-tag {
+.query-builder--list-item.active .group-by-tag,
+.query-builder--list-item .group-by-tag.btn-primary {
   visibility: visible;
 }
 .query-builder--db-dropdown {

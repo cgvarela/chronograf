@@ -1,54 +1,77 @@
-import React, {PropTypes} from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
+
 import TickscriptHeader from 'src/kapacitor/components/TickscriptHeader'
 import TickscriptEditor from 'src/kapacitor/components/TickscriptEditor'
+import TickscriptEditorControls from 'src/kapacitor/components/TickscriptEditorControls'
+import TickscriptEditorConsole from 'src/kapacitor/components/TickscriptEditorConsole'
+import LogsTable from 'src/kapacitor/components/LogsTable'
 
 const Tickscript = ({
-  source,
   onSave,
+  onExit,
   task,
-  validation,
+  logs,
+  consoleMessage,
   onSelectDbrps,
   onChangeScript,
   onChangeType,
   onChangeID,
+  unsavedChanges,
   isNewTickscript,
-}) =>
+  areLogsVisible,
+  areLogsEnabled,
+  onToggleLogsVisibility,
+}) => (
   <div className="page">
     <TickscriptHeader
       task={task}
-      source={source}
       onSave={onSave}
-      onChangeID={onChangeID}
-      onChangeType={onChangeType}
-      onSelectDbrps={onSelectDbrps}
+      onExit={onExit}
+      unsavedChanges={unsavedChanges}
+      areLogsVisible={areLogsVisible}
+      areLogsEnabled={areLogsEnabled}
+      onToggleLogsVisibility={onToggleLogsVisibility}
       isNewTickscript={isNewTickscript}
     />
-    <div className="page-contents">
-      <div className="tickscript-console">
-        <div className="tickscript-console--output">
-          {validation
-            ? <p>
-                {validation}
-              </p>
-            : <p className="tickscript-console--default">
-                Save your TICKscript to validate it
-              </p>}
-        </div>
-      </div>
-      <div className="tickscript-editor">
+    <div className="page-contents--split">
+      <div
+        className="tickscript"
+        style={areLogsVisible ? {maxWidth: '50%'} : null}
+      >
+        <TickscriptEditorControls
+          isNewTickscript={isNewTickscript}
+          onSelectDbrps={onSelectDbrps}
+          onChangeType={onChangeType}
+          onChangeID={onChangeID}
+          task={task}
+        />
         <TickscriptEditor
           script={task.tickscript}
           onChangeScript={onChangeScript}
         />
+        <TickscriptEditorConsole
+          consoleMessage={consoleMessage}
+          unsavedChanges={unsavedChanges}
+        />
       </div>
+      {areLogsVisible ? <LogsTable logs={logs} /> : null}
     </div>
   </div>
+)
 
 const {arrayOf, bool, func, shape, string} = PropTypes
 
 Tickscript.propTypes = {
+  logs: arrayOf(shape()).isRequired,
   onSave: func.isRequired,
-  source: shape(),
+  onExit: func.isRequired,
+  source: shape({
+    id: string,
+  }),
+  areLogsVisible: bool,
+  areLogsEnabled: bool,
+  onToggleLogsVisibility: func.isRequired,
   task: shape({
     id: string,
     script: string,
@@ -56,10 +79,11 @@ Tickscript.propTypes = {
   }).isRequired,
   onChangeScript: func.isRequired,
   onSelectDbrps: func.isRequired,
-  validation: string,
+  consoleMessage: string,
   onChangeType: func.isRequired,
   onChangeID: func.isRequired,
   isNewTickscript: bool.isRequired,
+  unsavedChanges: bool,
 }
 
 export default Tickscript

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/influxdata/chronograf"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
@@ -12,7 +13,11 @@ func TestGenerate(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "relative",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Change:   "change",
 			Shift:    "1m",
@@ -26,8 +31,14 @@ func TestGenerate(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{"mean"},
+					Value: "mean",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "usage_user",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			Tags: map[string][]string{
@@ -58,7 +69,11 @@ func TestThreshold(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "threshold",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Operator: "greater than",
 			Value:    "90",
@@ -71,8 +86,14 @@ func TestThreshold(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{"mean"},
+					Value: "mean",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "usage_user",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			Tags: map[string][]string{
@@ -163,11 +184,14 @@ var trigger = data
         .levelTag(levelTag)
         .messageField(messageField)
         .durationField(durationField)
-        .slack()
-        .victorOps()
         .email()
+        .victorOps()
+        .slack()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -201,7 +225,9 @@ func TestThresholdStringCrit(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "haproxy",
 		Trigger: "threshold",
-		Alerts:  []string{"email"},
+		AlertNodes: chronograf.AlertNodes{
+			Email: []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Operator: "equal to",
 			Value:    "DOWN",
@@ -215,8 +241,14 @@ func TestThresholdStringCrit(t *testing.T) {
 			Measurement:     "haproxy",
 			Fields: []chronograf.Field{
 				{
-					Field: "status",
-					Funcs: []string{"last"},
+					Value: "last",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "status",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			GroupBy: chronograf.GroupBy{
@@ -304,6 +336,9 @@ var trigger = data
         .email()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -339,7 +374,9 @@ func TestThresholdStringCritGreater(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "haproxy",
 		Trigger: "threshold",
-		Alerts:  []string{"email"},
+		AlertNodes: chronograf.AlertNodes{
+			Email: []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Operator: "greater than",
 			Value:    "DOWN",
@@ -353,8 +390,14 @@ func TestThresholdStringCritGreater(t *testing.T) {
 			Measurement:     "haproxy",
 			Fields: []chronograf.Field{
 				{
-					Field: "status",
-					Funcs: []string{"last"},
+					Value: "last",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "status",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			GroupBy: chronograf.GroupBy{
@@ -442,6 +485,9 @@ var trigger = data
         .email()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -475,7 +521,11 @@ func TestThresholdDetail(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "threshold",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Operator: "greater than",
 			Value:    "90",
@@ -489,8 +539,14 @@ func TestThresholdDetail(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{"mean"},
+					Value: "mean",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "usage_user",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			Tags: map[string][]string{
@@ -584,11 +640,14 @@ var trigger = data
         .messageField(messageField)
         .durationField(durationField)
         .details(details)
-        .slack()
-        .victorOps()
         .email()
+        .victorOps()
+        .slack()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -622,7 +681,11 @@ func TestThresholdInsideRange(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "threshold",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Operator:   "inside range",
 			Value:      "90",
@@ -636,8 +699,14 @@ func TestThresholdInsideRange(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{"mean"},
+					Value: "mean",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "usage_user",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			Tags: map[string][]string{
@@ -730,11 +799,14 @@ var trigger = data
         .levelTag(levelTag)
         .messageField(messageField)
         .durationField(durationField)
-        .slack()
-        .victorOps()
         .email()
+        .victorOps()
+        .slack()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -768,7 +840,11 @@ func TestThresholdOutsideRange(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "threshold",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Operator:   "outside range",
 			Value:      "90",
@@ -782,8 +858,14 @@ func TestThresholdOutsideRange(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{"mean"},
+					Value: "mean",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "usage_user",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			Tags: map[string][]string{
@@ -876,11 +958,14 @@ var trigger = data
         .levelTag(levelTag)
         .messageField(messageField)
         .durationField(durationField)
-        .slack()
-        .victorOps()
         .email()
+        .victorOps()
+        .slack()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -914,7 +999,11 @@ func TestThresholdNoAggregate(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "threshold",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Operator: "greater than",
 			Value:    "90",
@@ -927,8 +1016,8 @@ func TestThresholdNoAggregate(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{},
+					Value: "usage_user",
+					Type:  "field",
 				},
 			},
 			Tags: map[string][]string{
@@ -1011,11 +1100,14 @@ var trigger = data
         .levelTag(levelTag)
         .messageField(messageField)
         .durationField(durationField)
-        .slack()
-        .victorOps()
         .email()
+        .victorOps()
+        .slack()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -1049,7 +1141,11 @@ func TestRelative(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "relative",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Change:   "% change",
 			Shift:    "1m",
@@ -1064,8 +1160,14 @@ func TestRelative(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{"mean"},
+					Value: "mean",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "usage_user",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			Tags: map[string][]string{
@@ -1168,11 +1270,14 @@ var trigger = past
         .levelTag(levelTag)
         .messageField(messageField)
         .durationField(durationField)
-        .slack()
-        .victorOps()
         .email()
+        .victorOps()
+        .slack()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -1206,7 +1311,11 @@ func TestRelativeChange(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "relative",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Change:   "change",
 			Shift:    "1m",
@@ -1221,8 +1330,14 @@ func TestRelativeChange(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{"mean"},
+					Value: "mean",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "usage_user",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			Tags: map[string][]string{
@@ -1325,11 +1440,14 @@ var trigger = past
         .levelTag(levelTag)
         .messageField(messageField)
         .durationField(durationField)
-        .slack()
-        .victorOps()
         .email()
+        .victorOps()
+        .slack()
 
 trigger
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -1363,7 +1481,11 @@ func TestDeadman(t *testing.T) {
 	alert := chronograf.AlertRule{
 		Name:    "name",
 		Trigger: "deadman",
-		Alerts:  []string{"slack", "victorops", "email"},
+		AlertNodes: chronograf.AlertNodes{
+			Slack:     []*chronograf.Slack{{}},
+			VictorOps: []*chronograf.VictorOps{{}},
+			Email:     []*chronograf.Email{{}},
+		},
 		TriggerValues: chronograf.TriggerValues{
 			Period: "10m",
 		},
@@ -1375,8 +1497,14 @@ func TestDeadman(t *testing.T) {
 			RetentionPolicy: "autogen",
 			Fields: []chronograf.Field{
 				{
-					Field: "usage_user",
-					Funcs: []string{"mean"},
+					Value: "mean",
+					Type:  "func",
+					Args: []chronograf.Field{
+						{
+							Value: "usage_user",
+							Type:  "field",
+						},
+					},
 				},
 			},
 			Tags: map[string][]string{
@@ -1458,14 +1586,17 @@ var trigger = data
         .levelTag(levelTag)
         .messageField(messageField)
         .durationField(durationField)
-        .slack()
-        .victorOps()
         .email()
+        .victorOps()
+        .slack()
 
 trigger
     |eval(lambda: "emitted")
         .as('value')
         .keep('value', messageField, durationField)
+    |eval(lambda: float("value"))
+        .as('value')
+        .keep()
     |influxDBOut()
         .create()
         .database(outputDB)
@@ -1488,9 +1619,7 @@ trigger
 			continue
 		}
 		if got != tt.want {
-			diff := diffmatchpatch.New()
-			delta := diff.DiffMain(string(tt.want), string(got), true)
-			t.Errorf("%q\n%s", tt.name, diff.DiffPrettyText(delta))
+			t.Errorf("%q\n%s", tt.name, cmp.Diff(string(tt.want), string(got)))
 		}
 	}
 }

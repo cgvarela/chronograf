@@ -1,4 +1,5 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import {connect} from 'react-redux'
 import {bindActionCreators} from 'redux'
 
@@ -11,7 +12,7 @@ import Dropdown from 'shared/components/Dropdown'
 import TemplateQueryBuilder from 'src/dashboards/components/template_variables/TemplateQueryBuilder'
 import TableInput from 'src/dashboards/components/template_variables/TableInput'
 import RowValues from 'src/dashboards/components/template_variables/RowValues'
-import RowButtons from 'src/dashboards/components/template_variables/RowButtons'
+import ConfirmButton from 'src/shared/components/ConfirmButton'
 
 import {runTemplateVariableQuery as runTemplateVariableQueryAJAX} from 'src/dashboards/apis'
 
@@ -21,7 +22,10 @@ import {TEMPLATE_TYPES} from 'src/dashboards/constants'
 import generateTemplateVariableQuery from 'src/dashboards/utils/templateVariableQueryGenerator'
 
 import {errorThrown as errorThrownAction} from 'shared/actions/errors'
-import {publishAutoDismissingNotification} from 'shared/dispatchers'
+import {notify as notifyAction} from 'shared/actions/notifications'
+
+import {notifyTempVarAlreadyExists} from 'shared/copy/notifications'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
 const compact = values => uniq(values).filter(value => /\S/.test(value))
 
@@ -42,7 +46,8 @@ const TemplateVariableRow = ({
   onSubmit,
   onErrorThrown,
   onDeleteTempVar,
-}) =>
+  source,
+}) => (
   <form
     className={classnames('template-variable-manager--table-row', {
       editing: isEditing,
@@ -67,13 +72,14 @@ const TemplateVariableRow = ({
       <Dropdown
         items={TEMPLATE_TYPES}
         onChoose={onSelectType}
-        onClick={onStartEdit}
+        onClick={onStartEdit('tempVar')}
         selected={TEMPLATE_TYPES.find(t => t.type === selectedType).text}
         className="dropdown-140"
       />
     </div>
     <div className="tvm--col-3">
       <TemplateQueryBuilder
+        source={source}
         onSelectDatabase={onSelectDatabase}
         selectedType={selectedType}
         selectedDatabase={selectedDatabase}
@@ -81,7 +87,7 @@ const TemplateVariableRow = ({
         selectedMeasurement={selectedMeasurement}
         selectedTagKey={selectedTagKey}
         onSelectTagKey={onSelectTagKey}
-        onStartEdit={onStartEdit}
+        onStartEdit={onStartEdit('tempVar')}
         onErrorThrown={onErrorThrown}
       />
       <RowValues
@@ -92,22 +98,42 @@ const TemplateVariableRow = ({
         autoFocusTarget={autoFocusTarget}
       />
     </div>
-    <div className="tvm--col-4">
-      <RowButtons
-        onStartEdit={onStartEdit}
-        isEditing={isEditing}
-        onCancelEdit={onCancelEdit}
-        onDelete={onDeleteTempVar}
-        id={id}
-        selectedType={selectedType}
-      />
+    <div className={`tvm--col-4${isEditing ? ' editing' : ''}`}>
+      {isEditing ? (
+        <div className="tvm-actions">
+          <button
+            className="btn btn-sm btn-info btn-square"
+            type="button"
+            onClick={onCancelEdit}
+          >
+            <span className="icon remove" />
+          </button>
+          <button className="btn btn-sm btn-success btn-square" type="submit">
+            <span className="icon checkmark" />
+          </button>
+        </div>
+      ) : (
+        <div className="tvm-actions">
+          <ConfirmButton
+            type="btn-danger"
+            confirmText="Delete template variable?"
+            confirmAction={onDeleteTempVar(id)}
+            icon="trash"
+            square={true}
+          />
+        </div>
+      )}
     </div>
   </form>
+)
 
+@ErrorHandling
 class RowWrapper extends Component {
   constructor(props) {
     super(props)
-    const {template: {type, query, isNew}} = this.props
+    const {
+      template: {type, query, isNew},
+    } = this.props
 
     this.state = {
       isEditing: !!isNew,
@@ -119,8 +145,6 @@ class RowWrapper extends Component {
       selectedTagKey: query && query.tagKey,
       autoFocusTarget: 'tempVar',
     }
-
-    this.runTemplateVariableQuery = ::this.runTemplateVariableQuery
   }
 
   handleSubmit = ({
@@ -145,10 +169,7 @@ class RowWrapper extends Component {
     const tempVar = `\u003a${_tempVar}\u003a` // add ':'s
 
     if (tempVarAlreadyExists(tempVar, id)) {
-      return notify(
-        'error',
-        `Variable '${_tempVar}' already exists. Please enter a new value.`
-      )
+      return notify(notifyTempVarAlreadyExists(_tempVar))
     }
 
     this.setState({
@@ -201,7 +222,11 @@ class RowWrapper extends Component {
 
   handleCancelEdit = () => {
     const {
-      template: {type, query: {db, measurement, tagKey}, id},
+      template: {
+        type,
+        query: {db, measurement, tagKey},
+        id,
+      },
       onDelete,
     } = this.props
     const {hasBeenSavedToComponentStateOnce} = this.state
@@ -349,7 +374,7 @@ TemplateVariableRow.propTypes = {
 
 const mapDispatchToProps = dispatch => ({
   onErrorThrown: bindActionCreators(errorThrownAction, dispatch),
-  notify: bindActionCreators(publishAutoDismissingNotification, dispatch),
+  notify: bindActionCreators(notifyAction, dispatch),
 })
 
 export default connect(null, mapDispatchToProps)(OnClickOutside(RowWrapper))

@@ -1,27 +1,39 @@
-import React, {PropTypes, Component} from 'react'
+import _ from 'lodash'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import Dygraph from 'shared/components/Dygraph'
-import shallowCompare from 'react-addons-shallow-compare'
 
 import SingleStat from 'src/shared/components/SingleStat'
-import timeSeriesToDygraph from 'utils/timeSeriesToDygraph'
+import {timeSeriesToDygraph} from 'utils/timeSeriesTransformers'
 
-import {SINGLE_STAT_LINE_COLORS} from 'src/shared/graphs/helpers'
+import {colorsStringSchema} from 'shared/schemas'
+import {ErrorHandlingWith} from 'src/shared/decorators/errors'
+import InvalidData from 'src/shared/components/InvalidData'
 
+const validateTimeSeries = timeseries => {
+  return _.every(timeseries, r =>
+    _.every(
+      r,
+      (v, i) => (i === 0 && Date.parse(v)) || _.isNumber(v) || _.isNull(v)
+    )
+  )
+}
+@ErrorHandlingWith(InvalidData)
 class LineGraph extends Component {
   constructor(props) {
     super(props)
-  }
-
-  shouldComponentUpdate(nextProps, nextState) {
-    return shallowCompare(this, nextProps, nextState)
+    this.isValidData = true
   }
 
   componentWillMount() {
-    const {data, activeQueryIndex, isInDataExplorer} = this.props
-    this._timeSeries = timeSeriesToDygraph(
-      data,
-      activeQueryIndex,
-      isInDataExplorer
+    const {data, isInDataExplorer} = this.props
+    this.parseTimeSeries(data, isInDataExplorer)
+  }
+
+  parseTimeSeries(data, isInDataExplorer) {
+    this._timeSeries = timeSeriesToDygraph(data, isInDataExplorer)
+    this.isValidData = validateTimeSeries(
+      _.get(this._timeSeries, 'timeSeries', [])
     )
   }
 
@@ -31,35 +43,38 @@ class LineGraph extends Component {
       data !== nextProps.data ||
       activeQueryIndex !== nextProps.activeQueryIndex
     ) {
-      this._timeSeries = timeSeriesToDygraph(
-        nextProps.data,
-        nextProps.activeQueryIndex,
-        nextProps.isInDataExplorer
-      )
+      this.parseTimeSeries(nextProps.data, nextProps.isInDataExplorer)
     }
   }
 
   render() {
+    if (!this.isValidData) {
+      return <InvalidData />
+    }
+
     const {
       data,
       axes,
-      cell,
       title,
+      colors,
+      cellID,
       onZoom,
       queries,
+      hoverTime,
       timeRange,
       cellHeight,
       ruleValues,
       isBarGraph,
-      resizeCoords,
-      synchronizer,
       isRefreshing,
+      setResolution,
       isGraphFilled,
       showSingleStat,
       displayOptions,
+      staticLegend,
       underlayCallback,
       overrideLineColors,
       isFetchingInitially,
+      handleSetHoverTime,
     } = this.props
 
     const {labels, timeSeries, dygraphSeries} = this._timeSeries
@@ -76,6 +91,7 @@ class LineGraph extends Component {
       rightGap: 0,
       yRangePad: 10,
       labelsKMB: true,
+      fillGraph: true,
       underlayCallback,
       axisLabelWidth: 60,
       drawAxesAtZero: true,
@@ -84,51 +100,69 @@ class LineGraph extends Component {
       connectSeparatedPoints: true,
     }
 
-    const lineColors = showSingleStat
-      ? SINGLE_STAT_LINE_COLORS
-      : overrideLineColors
+    const containerStyle = {
+      width: 'calc(100% - 32px)',
+      height: 'calc(100% - 16px)',
+      position: 'absolute',
+      top: '8px',
+    }
+
+    const prefix = axes ? axes.y.prefix : ''
+    const suffix = axes ? axes.y.suffix : ''
 
     return (
       <div className="dygraph graph--hasYLabel" style={{height: '100%'}}>
         {isRefreshing ? <GraphLoadingDots /> : null}
         <Dygraph
-          cell={cell}
           axes={axes}
+          cellID={cellID}
+          colors={colors}
           onZoom={onZoom}
           labels={labels}
           queries={queries}
+          options={options}
+          hoverTime={hoverTime}
           timeRange={timeRange}
           isBarGraph={isBarGraph}
           timeSeries={timeSeries}
           ruleValues={ruleValues}
-          synchronizer={synchronizer}
-          resizeCoords={resizeCoords}
-          overrideLineColors={lineColors}
           dygraphSeries={dygraphSeries}
-          setResolution={this.props.setResolution}
-          containerStyle={{width: '100%', height: '100%'}}
+          setResolution={setResolution}
+          handleSetHoverTime={handleSetHoverTime}
+          overrideLineColors={overrideLineColors}
+          containerStyle={containerStyle}
+          staticLegend={staticLegend}
           isGraphFilled={showSingleStat ? false : isGraphFilled}
-          options={options}
-        />
-        {showSingleStat
-          ? <SingleStat data={data} cellHeight={cellHeight} />
-          : null}
+        >
+          {showSingleStat && (
+            <SingleStat
+              prefix={prefix}
+              suffix={suffix}
+              data={data}
+              lineGraph={true}
+              colors={colors}
+              cellHeight={cellHeight}
+            />
+          )}
+        </Dygraph>
       </div>
     )
   }
 }
 
-const GraphLoadingDots = () =>
+const GraphLoadingDots = () => (
   <div className="graph-panel__refreshing">
     <div />
     <div />
     <div />
   </div>
+)
 
-const GraphSpinner = () =>
+const GraphSpinner = () => (
   <div className="graph-fetching">
     <div className="graph-spinner" />
   </div>
+)
 
 const {array, arrayOf, bool, func, number, shape, string} = PropTypes
 
@@ -136,9 +170,11 @@ LineGraph.defaultProps = {
   underlayCallback: () => {},
   isGraphFilled: true,
   overrideLineColors: null,
+  staticLegend: false,
 }
 
 LineGraph.propTypes = {
+  cellID: string,
   axes: shape({
     y: shape({
       bounds: array,
@@ -149,17 +185,21 @@ LineGraph.propTypes = {
       label: string,
     }),
   }),
+  hoverTime: string,
+  handleSetHoverTime: func,
   title: string,
   isFetchingInitially: bool,
   isRefreshing: bool,
   underlayCallback: func,
   isGraphFilled: bool,
   isBarGraph: bool,
+  staticLegend: bool,
   overrideLineColors: array,
   showSingleStat: bool,
   displayOptions: shape({
     stepPlot: bool,
     stackedGraph: bool,
+    animatedZooms: bool,
   }),
   activeQueryIndex: number,
   ruleValues: shape({}),
@@ -167,14 +207,12 @@ LineGraph.propTypes = {
     lower: string.isRequired,
   }),
   isInDataExplorer: bool,
-  synchronizer: func,
   setResolution: func,
   cellHeight: number,
-  cell: shape(),
   onZoom: func,
-  resizeCoords: shape(),
   queries: arrayOf(shape({}).isRequired).isRequired,
   data: arrayOf(shape({}).isRequired).isRequired,
+  colors: colorsStringSchema,
 }
 
 export default LineGraph

@@ -1,18 +1,21 @@
-import React, {PropTypes} from 'react'
-import {CHANGES, OPERATORS, SHIFTS} from 'src/kapacitor/constants'
+import React from 'react'
+import PropTypes from 'prop-types'
+import {CHANGES, RELATIVE_OPERATORS, SHIFTS} from 'src/kapacitor/constants'
 import Dropdown from 'shared/components/Dropdown'
 
 const mapToItems = (arr, type) => arr.map(text => ({text, type}))
 const changes = mapToItems(CHANGES, 'change')
 const shifts = mapToItems(SHIFTS, 'shift')
-const operators = mapToItems(OPERATORS, 'operator')
+const operators = mapToItems(RELATIVE_OPERATORS, 'operator')
 
 const Relative = ({
   onRuleTypeInputChange,
   onDropdownChange,
-  rule: {values: {change, shift, operator, value}},
-}) =>
-  <div className="rule-section--row rule-section--border-bottom">
+  rule: {
+    values: {change, shift, operator, value},
+  },
+}) => (
+  <div className="rule-section--row rule-section--row-first rule-section--border-bottom">
     <p>Send Alert when</p>
     <Dropdown
       className="dropdown-110"
@@ -51,6 +54,7 @@ const Relative = ({
     </form>
     {change === CHANGES[1] ? <p>%</p> : null}
   </div>
+)
 
 const {shape, string, func} = PropTypes
 

@@ -1,17 +1,23 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import rome from 'rome'
 import moment from 'moment'
 
-import shortcuts from 'hson!shared/data/timeRangeShortcuts.hson'
+import shortcuts from 'shared/data/timeRangeShortcuts'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 const dateFormat = 'YYYY-MM-DD HH:mm'
 
+@ErrorHandling
 class CustomTimeRange extends Component {
   constructor(props) {
     super(props)
+    this.state = {
+      isNow: this.props.timeRange.upper === 'now()',
+    }
   }
 
   componentDidMount() {
-    const {timeRange} = this.props
+    const {timeRange, timeInterval} = this.props
 
     const lower = rome(this.lower, {
       dateValidator: rome.val.beforeEq(this.upper),
@@ -20,6 +26,7 @@ class CustomTimeRange extends Component {
       autoClose: false,
       autoHideOnBlur: false,
       autoHideOnClick: false,
+      timeInterval,
     })
 
     const upper = rome(this.upper, {
@@ -29,6 +36,7 @@ class CustomTimeRange extends Component {
       initialValue: this.getInitialDate(timeRange.upper),
       autoHideOnBlur: false,
       autoHideOnClick: false,
+      timeInterval,
     })
 
     this.lowerCal = lower
@@ -68,6 +76,14 @@ class CustomTimeRange extends Component {
     this.upperCal.refresh()
   }
 
+  handleToggleNow = () => {
+    this.setState({isNow: !this.state.isNow})
+  }
+
+  handleNowOff = () => {
+    this.setState({isNow: false})
+  }
+
   /*
    * Upper and lower time ranges are passed in with single quotes as part of
    * the string literal, i.e. "'2015-09-23T18:00:00.000Z'".  Remove them
@@ -76,6 +92,10 @@ class CustomTimeRange extends Component {
   _formatTimeRange = timeRange => {
     if (!timeRange) {
       return ''
+    }
+
+    if (timeRange === 'now()') {
+      return moment(new Date()).format(dateFormat)
     }
 
     // If the given time range is relative, create a fixed timestamp based on its value
@@ -89,10 +109,16 @@ class CustomTimeRange extends Component {
 
   handleClick = () => {
     const {onApplyTimeRange, onClose} = this.props
+    const {isNow} = this.state
+
     const lower = this.lowerCal.getDate().toISOString()
     const upper = this.upperCal.getDate().toISOString()
 
-    onApplyTimeRange({lower, upper})
+    if (isNow) {
+      onApplyTimeRange({lower, upper: 'now()'})
+    } else {
+      onApplyTimeRange({lower, upper})
+    }
 
     if (onClose) {
       onClose()
@@ -142,11 +168,15 @@ class CustomTimeRange extends Component {
   }
 
   render() {
+    const {isNow} = this.state
+    const {page} = this.props
+    const isNowDisplayed = page !== 'DataExplorer'
+
     return (
       <div className="custom-time--container">
         <div className="custom-time--shortcuts">
           <div className="custom-time--shortcuts-header">Shortcuts</div>
-          {shortcuts.map(({id, name}) =>
+          {shortcuts.map(({id, name}) => (
             <div
               key={id}
               className="custom-time--shortcut"
@@ -154,12 +184,12 @@ class CustomTimeRange extends Component {
             >
               {name}
             </div>
-          )}
+          ))}
         </div>
         <div className="custom-time--wrap">
           <div className="custom-time--dates" onClick={this.handleRefreshCals}>
             <div
-              className="lower-container"
+              className="custom-time--lower-container"
               ref={r => (this.lowerContainer = r)}
             >
               <input
@@ -170,15 +200,33 @@ class CustomTimeRange extends Component {
               />
             </div>
             <div
-              className="upper-container"
+              className="custom-time--upper-container"
               ref={r => (this.upperContainer = r)}
+              disabled={isNow}
             >
+              {isNowDisplayed ? (
+                <div
+                  className={`btn btn-xs custom-time--now ${
+                    isNow ? 'btn-primary' : 'btn-default'
+                  }`}
+                  onClick={this.handleToggleNow}
+                >
+                  Now
+                </div>
+              ) : null}
               <input
                 className="custom-time--upper form-control input-sm"
                 ref={r => (this.upper = r)}
                 placeholder="to"
                 onKeyUp={this.handleRefreshCals}
+                disabled={isNow}
               />
+              {isNow && page !== 'DataExplorer' ? (
+                <div
+                  className="custom-time--mask"
+                  onClick={this.handleNowOff}
+                />
+              ) : null}
             </div>
           </div>
           <div
@@ -193,7 +241,11 @@ class CustomTimeRange extends Component {
   }
 }
 
-const {func, shape, string} = PropTypes
+CustomTimeRange.defaultProps = {
+  timeInterval: 1800,
+}
+
+const {func, shape, string, number} = PropTypes
 
 CustomTimeRange.propTypes = {
   onApplyTimeRange: func.isRequired,
@@ -201,7 +253,9 @@ CustomTimeRange.propTypes = {
     lower: string.isRequired,
     upper: string,
   }).isRequired,
+  timeInterval: number,
   onClose: func,
+  page: string,
 }
 
 export default CustomTimeRange

@@ -1,131 +1,228 @@
-import React, {PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import {withRouter} from 'react-router'
+import _ from 'lodash'
 import {getSource} from 'shared/apis'
 import {createSource, updateSource} from 'shared/apis'
 import {
   addSource as addSourceAction,
   updateSource as updateSourceAction,
 } from 'shared/actions/sources'
+import {notify as notifyAction} from 'shared/actions/notifications'
 import {connect} from 'react-redux'
+import {bindActionCreators} from 'redux'
 
+import Notifications from 'shared/components/Notifications'
 import SourceForm from 'src/sources/components/SourceForm'
 import FancyScrollbar from 'shared/components/FancyScrollbar'
 import SourceIndicator from 'shared/components/SourceIndicator'
+import {DEFAULT_SOURCE} from 'shared/constants'
+const initialPath = '/sources/new'
 
-const {func, shape, string} = PropTypes
+import {
+  notifyErrorConnectingToSource,
+  notifySourceCreationSucceeded,
+  notifySourceCreationFailed,
+  notifySourceUdpated,
+  notifySourceUdpateFailed,
+} from 'shared/copy/notifications'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
-export const SourcePage = React.createClass({
-  propTypes: {
-    params: shape({
-      id: string,
-      sourceID: string,
-    }),
-    router: shape({
-      push: func.isRequired,
-    }).isRequired,
-    location: shape({
-      query: shape({
-        redirectPath: string,
-      }).isRequired,
-    }).isRequired,
-    addFlashMessage: func.isRequired,
-    addSourceAction: func,
-    updateSourceAction: func,
-  },
+@ErrorHandling
+class SourcePage extends Component {
+  constructor(props) {
+    super(props)
 
-  getInitialState() {
-    return {
-      source: {},
-      editMode: this.props.params.id !== undefined,
-      error: '',
+    this.state = {
+      isLoading: true,
+      source: DEFAULT_SOURCE,
+      editMode: props.params.id !== undefined,
+      isInitialSource: props.router.location.pathname === initialPath,
     }
-  },
+  }
 
   componentDidMount() {
-    if (!this.state.editMode) {
-      return
-    }
-    getSource(this.props.params.id).then(({data: source}) => {
-      this.setState({source})
-    })
-  },
+    const {editMode} = this.state
+    const {params, notify} = this.props
 
-  handleInputChange(e) {
-    const val = e.target.value
-    const name = e.target.name
-    this.setState(prevState => {
-      const newSource = Object.assign({}, prevState.source, {
-        [name]: val,
-      })
-      return Object.assign({}, prevState, {source: newSource})
-    })
-  },
-
-  handleBlurSourceURL(newSource) {
-    if (this.state.editMode) {
-      return
+    if (!editMode) {
+      return this.setState({isLoading: false})
     }
 
-    if (!newSource.url) {
-      return
-    }
-
-    // if there is a type on source it has already been created
-    if (newSource.type) {
-      return
-    }
-
-    createSource(newSource)
-      .then(({data: sourceFromServer}) => {
-        this.props.addSourceAction(sourceFromServer)
-        this.setState({source: sourceFromServer, error: null})
-      })
-      .catch(({data: error}) => {
-        // dont want to flash this until they submit
-        this.setState({error: error.message})
-      })
-  },
-
-  handleSubmit(newSource) {
-    const {router, params, addFlashMessage} = this.props
-    const {error} = this.state
-
-    if (error) {
-      return addFlashMessage({type: 'error', text: error})
-    }
-
-    updateSource(newSource)
-      .then(({data: sourceFromServer}) => {
-        this.props.updateSourceAction(sourceFromServer)
-        router.push(`/sources/${params.sourceID}/manage-sources`)
-        addFlashMessage({type: 'success', text: 'The source info saved'})
-      })
-      .catch(() => {
-        addFlashMessage({
-          type: 'error',
-          text: 'There was a problem updating the source. Check the settings',
+    getSource(params.id)
+      .then(({data: source}) => {
+        this.setState({
+          source: {...DEFAULT_SOURCE, ...source},
+          isLoading: false,
         })
       })
-  },
+      .catch(error => {
+        notify(notifyErrorConnectingToSource(this._parseError(error)))
+        this.setState({isLoading: false})
+      })
+  }
+
+  handleInputChange = e => {
+    let val = e.target.value
+    const name = e.target.name
+
+    if (e.target.type === 'checkbox') {
+      val = e.target.checked
+    }
+
+    this.setState(prevState => {
+      const source = {
+        ...prevState.source,
+        [name]: val,
+      }
+
+      return {...prevState, source}
+    })
+  }
+
+  handleBlurSourceURL = () => {
+    const {source, editMode} = this.state
+    if (editMode) {
+      this.setState(this._normalizeSource)
+      return
+    }
+
+    if (!source.url) {
+      return
+    }
+
+    this.setState(this._normalizeSource, this._createSourceOnBlur)
+  }
+
+  handleSubmit = e => {
+    e.preventDefault()
+    const {isCreated, editMode} = this.state
+    const isNewSource = !editMode
+
+    if (!isCreated && isNewSource) {
+      return this.setState(this._normalizeSource, this._createSource)
+    }
+
+    this.setState(this._normalizeSource, this._updateSource)
+  }
+
+  gotoPurgatory = () => {
+    const {router} = this.props
+    router.push('/purgatory')
+  }
+
+  _normalizeSource({source}) {
+    const url = source.url.trim()
+    if (source.url.startsWith('http')) {
+      return {source: {...source, url}}
+    }
+    return {source: {...source, url: `http://${url}`}}
+  }
+
+  _createSourceOnBlur = () => {
+    const {source} = this.state
+    // if there is a type on source it has already been created
+    if (source.type) {
+      return
+    }
+    createSource(source)
+      .then(({data: sourceFromServer}) => {
+        this.props.addSource(sourceFromServer)
+        this.setState({
+          source: {...DEFAULT_SOURCE, ...sourceFromServer},
+          isCreated: true,
+        })
+      })
+      .catch(err => {
+        // dont want to flash this until they submit
+        const error = this._parseError(err)
+        console.error('Error creating InfluxDB connection: ', error)
+      })
+  }
+
+  _createSource = () => {
+    const {source} = this.state
+    const {notify} = this.props
+    createSource(source)
+      .then(({data: sourceFromServer}) => {
+        this.props.addSource(sourceFromServer)
+        this._redirect(sourceFromServer)
+        notify(notifySourceCreationSucceeded(source.name))
+      })
+      .catch(error => {
+        notify(notifySourceCreationFailed(source.name, this._parseError(error)))
+      })
+  }
+
+  _updateSource = () => {
+    const {source} = this.state
+    const {notify} = this.props
+    updateSource(source)
+      .then(({data: sourceFromServer}) => {
+        this.props.updateSource(sourceFromServer)
+        this._redirect(sourceFromServer)
+        notify(notifySourceUdpated(source.name))
+      })
+      .catch(error => {
+        notify(notifySourceUdpateFailed(source.name, this._parseError(error)))
+      })
+  }
+
+  _redirect = source => {
+    const {isInitialSource} = this.state
+    const {params, router} = this.props
+
+    if (isInitialSource) {
+      return this._redirectToApp(source)
+    }
+
+    router.push(`/sources/${params.sourceID}/manage-sources`)
+  }
+
+  _redirectToApp = source => {
+    const {location, router} = this.props
+    const {redirectPath} = location.query
+
+    if (!redirectPath) {
+      return router.push(`/sources/${source.id}/hosts`)
+    }
+
+    const fixedPath = redirectPath.replace(
+      /\/sources\/[^/]*/,
+      `/sources/${source.id}`
+    )
+    return router.push(fixedPath)
+  }
+
+  _parseError = error => {
+    return _.get(error, ['data', 'message'], error)
+  }
 
   render() {
-    const {source, editMode} = this.state
+    const {isLoading, source, editMode, isInitialSource} = this.state
 
-    if (editMode && !source.id) {
+    if (isLoading) {
       return <div className="page-spinner" />
     }
 
     return (
-      <div className="page" id="source-form-page">
+      <div className={`${isInitialSource ? '' : 'page'}`}>
+        <Notifications />
         <div className="page-header">
-          <div className="page-header__container">
-            <div className="page-header__left">
-              <h1 className="page-header__title">
-                {editMode ? 'Edit Source' : 'Add a New Source'}
-              </h1>
-            </div>
-            <div className="page-header__right">
-              <SourceIndicator />
+          <div className="page-header__container page-header__source-page">
+            <div className="page-header__col-md-8">
+              <div className="page-header__left">
+                <h1 className="page-header__title">
+                  {editMode
+                    ? 'Configure InfluxDB Connection'
+                    : 'Add a New InfluxDB Connection'}
+                </h1>
+              </div>
+              {isInitialSource ? null : (
+                <div className="page-header__right">
+                  <SourceIndicator />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -133,13 +230,15 @@ export const SourcePage = React.createClass({
           <div className="container-fluid">
             <div className="row">
               <div className="col-md-8 col-md-offset-2">
-                <div className="panel panel-minimal">
+                <div className="panel">
                   <SourceForm
                     source={source}
                     editMode={editMode}
                     onInputChange={this.handleInputChange}
                     onSubmit={this.handleSubmit}
                     onBlurSourceURL={this.handleBlurSourceURL}
+                    isInitialSource={isInitialSource}
+                    gotoPurgatory={this.gotoPurgatory}
                   />
                 </div>
               </div>
@@ -148,13 +247,32 @@ export const SourcePage = React.createClass({
         </FancyScrollbar>
       </div>
     )
-  },
-})
-
-function mapStateToProps(_) {
-  return {}
+  }
 }
 
-export default connect(mapStateToProps, {addSourceAction, updateSourceAction})(
-  withRouter(SourcePage)
-)
+const {func, shape, string} = PropTypes
+
+SourcePage.propTypes = {
+  params: shape({
+    id: string,
+    sourceID: string,
+  }),
+  router: shape({
+    push: func.isRequired,
+  }).isRequired,
+  location: shape({
+    query: shape({
+      redirectPath: string,
+    }).isRequired,
+  }).isRequired,
+  notify: func.isRequired,
+  addSource: func.isRequired,
+  updateSource: func.isRequired,
+}
+
+const mapDispatchToProps = dispatch => ({
+  notify: bindActionCreators(notifyAction, dispatch),
+  addSource: bindActionCreators(addSourceAction, dispatch),
+  updateSource: bindActionCreators(updateSourceAction, dispatch),
+})
+export default connect(null, mapDispatchToProps)(withRouter(SourcePage))

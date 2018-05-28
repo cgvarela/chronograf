@@ -1,4 +1,4 @@
-required = ["github.com/jteeuwen/go-bindata","github.com/gogo/protobuf/proto","github.com/gogo/protobuf/jsonpb","github.com/gogo/protobuf/protoc-gen-gogo","github.com/gogo/protobuf/gogoproto"]
+required = ["github.com/kevinburke/go-bindata","github.com/gogo/protobuf/proto","github.com/gogo/protobuf/jsonpb","github.com/gogo/protobuf/protoc-gen-gogo","github.com/gogo/protobuf/gogoproto"]
 
 [[constraint]]
   name = "github.com/NYTimes/gziphandler"
@@ -26,19 +26,11 @@ required = ["github.com/jteeuwen/go-bindata","github.com/gogo/protobuf/proto","g
 
 [[constraint]]
   name = "github.com/gogo/protobuf"
-  revision = "6abcf94fd4c97dcb423fdafd42fe9f96ca7e421b"
+  revision = "49944b4a4b085da44c43d4b233ea40787396371f"
 
 [[constraint]]
   name = "github.com/google/go-github"
   revision = "1bc362c7737e51014af7299e016444b654095ad9"
-
-[[constraint]]
-  name = "github.com/influxdata/influxdb"
-  revision = "af72d9b0e4ebe95be30e89b160f43eabaf0529ed"
-
-[[constraint]]
-  name = "github.com/influxdata/kapacitor"
-  version = "^1.2.0"
 
 [[constraint]]
   name = "github.com/influxdata/usage-client"
@@ -49,8 +41,8 @@ required = ["github.com/jteeuwen/go-bindata","github.com/gogo/protobuf/proto","g
   revision = "4cc2832a6e6d1d3b815e2b9d544b2a4dfb3ce8fa"
 
 [[constraint]]
-  name = "github.com/jteeuwen/go-bindata"
-  revision = "a0ff2567cfb70903282db057e799fd826784d41d"
+  name = "github.com/kevinburke/go-bindata"
+  revision = "46eb4c183bfc1ebb527d9d19bcded39476302eb8"
 
 [[constraint]]
   name = "github.com/satori/go.uuid"
@@ -70,8 +62,20 @@ required = ["github.com/jteeuwen/go-bindata","github.com/gogo/protobuf/proto","g
 
 [[constraint]]
   name = "golang.org/x/oauth2"
-  revision = "1e695b1c8febf17aad3bfa7bf0a819ef94b98ad5"
+  revision = "2f32c3ac0fa4fb807a0fcefb0b6f2468a0d99bd0"
 
 [[constraint]]
   name = "google.golang.org/api"
   revision = "bc20c61134e1d25265dd60049f5735381e79b631"
+
+[[constraint]]
+  name = "github.com/influxdata/influxdb"
+  version = "~1.1.0"
+
+[[constraint]]
+  name = "github.com/influxdata/ifql"
+  revision = "9445c4494d4421db2ab1aaaf6f4069446f11752e"
+
+[[constraint]]
+  name = "github.com/influxdata/kapacitor"
+  revision = "4f10efc41b4dcac070495cf95ba2c41cfcc2aa3a"

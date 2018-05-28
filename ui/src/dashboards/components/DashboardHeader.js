@@ -1,102 +1,117 @@
-import React, {PropTypes} from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
 import classnames from 'classnames'
+
+import Authorized, {EDITOR_ROLE} from 'src/auth/Authorized'
 
 import AutoRefreshDropdown from 'shared/components/AutoRefreshDropdown'
 import TimeRangeDropdown from 'shared/components/TimeRangeDropdown'
 import SourceIndicator from 'shared/components/SourceIndicator'
 import GraphTips from 'shared/components/GraphTips'
+import DashboardHeaderEdit from 'src/dashboards/components/DashboardHeaderEdit'
+import DashboardSwitcher from 'src/dashboards/components/DashboardSwitcher'
 
 const DashboardHeader = ({
-  children,
-  buttonText,
-  dashboard,
-  headerText,
-  timeRange: {upper, lower},
-  zoomedTimeRange: {zoomedLower, zoomedUpper},
-  autoRefresh,
+  names,
+  onSave,
+  onCancel,
+  isEditMode,
   isHidden,
+  dashboard,
+  onAddCell,
+  autoRefresh,
+  activeDashboard,
+  onEditDashboard,
+  onManualRefresh,
   handleChooseTimeRange,
   handleChooseAutoRefresh,
-  handleClickPresentationButton,
-  onAddCell,
-  onEditDashboard,
   onToggleTempVarControls,
   showTemplateControlBar,
+  timeRange: {upper, lower},
+  handleClickPresentationButton,
+  zoomedTimeRange: {zoomedLower, zoomedUpper},
 }) =>
-  isHidden
-    ? null
-    : <div className="page-header full-width">
-        <div className="page-header__container">
-          <div className="page-header__left">
-            {buttonText &&
-              <div className="dropdown page-header-dropdown">
-                <button
-                  className="dropdown-toggle"
-                  type="button"
-                  data-toggle="dropdown"
-                >
-                  <span>
-                    {buttonText}
-                  </span>
-                  <span className="caret" />
-                </button>
-                <ul className="dropdown-menu">
-                  {children}
-                </ul>
-              </div>}
-            {headerText}
-          </div>
-          <div className="page-header__right">
-            <GraphTips />
-            <SourceIndicator />
-            {dashboard
-              ? <button className="btn btn-primary btn-sm" onClick={onAddCell}>
-                  <span className="icon plus" />
-                  Add Cell
-                </button>
-              : null}
-            {dashboard
-              ? <button
-                  className="btn btn-default btn-sm"
-                  onClick={onEditDashboard}
-                >
-                  <span className="icon pencil" />
-                  Rename
-                </button>
-              : null}
-            {dashboard
-              ? <div
-                  className={classnames('btn btn-default btn-sm', {
-                    active: showTemplateControlBar,
-                  })}
-                  onClick={onToggleTempVarControls}
-                >
-                  <span className="icon cube" />Template Variables
-                </div>
-              : null}
-            <AutoRefreshDropdown
-              onChoose={handleChooseAutoRefresh}
-              selected={autoRefresh}
-              iconName="refresh"
+  isHidden ? null : (
+    <div className="page-header full-width">
+      <div className="page-header__container">
+        <div
+          className={
+            dashboard
+              ? 'page-header__left page-header__dash-editable'
+              : 'page-header__left'
+          }
+        >
+          {names && names.length > 1 ? (
+            <DashboardSwitcher
+              names={names}
+              activeDashboard={activeDashboard}
             />
-            <TimeRangeDropdown
-              onChooseTimeRange={handleChooseTimeRange}
-              selected={{
-                upper: zoomedUpper || upper,
-                lower: zoomedLower || lower,
-              }}
-            />
-            <div
-              className="btn btn-default btn-sm btn-square"
-              onClick={handleClickPresentationButton}
+          ) : null}
+          {dashboard ? (
+            <Authorized
+              requiredRole={EDITOR_ROLE}
+              replaceWithIfNotAuthorized={
+                <h1 className="page-header__title">{activeDashboard}</h1>
+              }
             >
-              <span className="icon expand-a" style={{margin: 0}} />
+              <DashboardHeaderEdit
+                onSave={onSave}
+                onCancel={onCancel}
+                activeDashboard={activeDashboard}
+                onEditDashboard={onEditDashboard}
+                isEditMode={isEditMode}
+              />
+            </Authorized>
+          ) : (
+            <h1 className="page-header__title">{activeDashboard}</h1>
+          )}
+        </div>
+        <div className="page-header__right">
+          <GraphTips />
+          <SourceIndicator />
+          {dashboard ? (
+            <Authorized requiredRole={EDITOR_ROLE}>
+              <button className="btn btn-primary btn-sm" onClick={onAddCell}>
+                <span className="icon plus" />
+                Add Cell
+              </button>
+            </Authorized>
+          ) : null}
+          {dashboard ? (
+            <div
+              className={classnames('btn btn-default btn-sm', {
+                active: showTemplateControlBar,
+              })}
+              onClick={onToggleTempVarControls}
+            >
+              <span className="icon cube" />Template Variables
             </div>
+          ) : null}
+          <AutoRefreshDropdown
+            onChoose={handleChooseAutoRefresh}
+            onManualRefresh={onManualRefresh}
+            selected={autoRefresh}
+            iconName="refresh"
+          />
+          <TimeRangeDropdown
+            onChooseTimeRange={handleChooseTimeRange}
+            selected={{
+              upper: zoomedUpper || upper,
+              lower: zoomedLower || lower,
+            }}
+          />
+          <div
+            className="btn btn-default btn-sm btn-square"
+            onClick={handleClickPresentationButton}
+          >
+            <span className="icon expand-a" />
           </div>
         </div>
       </div>
+    </div>
+  )
 
-const {array, bool, func, number, shape, string} = PropTypes
+const {arrayOf, bool, func, number, shape, string} = PropTypes
 
 DashboardHeader.defaultProps = {
   zoomedTimeRange: {
@@ -106,24 +121,27 @@ DashboardHeader.defaultProps = {
 }
 
 DashboardHeader.propTypes = {
-  children: array,
-  buttonText: string,
+  activeDashboard: string.isRequired,
+  onEditDashboard: func,
   dashboard: shape({}),
-  headerText: string,
   timeRange: shape({
     lower: string,
     upper: string,
   }).isRequired,
   autoRefresh: number.isRequired,
   isHidden: bool.isRequired,
+  isEditMode: bool,
   handleChooseTimeRange: func.isRequired,
   handleChooseAutoRefresh: func.isRequired,
+  onManualRefresh: func.isRequired,
   handleClickPresentationButton: func.isRequired,
   onAddCell: func,
-  onEditDashboard: func,
   onToggleTempVarControls: func,
   showTemplateControlBar: bool,
   zoomedTimeRange: shape({}),
+  onCancel: func,
+  onSave: func,
+  names: arrayOf(shape({})).isRequired,
 }
 
 export default DashboardHeader

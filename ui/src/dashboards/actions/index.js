@@ -8,10 +8,19 @@ import {
   runTemplateVariableQuery,
 } from 'src/dashboards/apis'
 
-import {publishAutoDismissingNotification} from 'shared/dispatchers'
+import {notify} from 'shared/actions/notifications'
 import {errorThrown} from 'shared/actions/errors'
 
-import {NEW_DEFAULT_DASHBOARD_CELL} from 'src/dashboards/constants'
+import {
+  getNewDashboardCell,
+  getClonedDashboardCell,
+} from 'src/dashboards/utils/cellGetters'
+import {
+  notifyDashboardDeleted,
+  notifyDashboardDeleteFailed,
+  notifyCellAdded,
+  notifyCellDeleted,
+} from 'shared/copy/notifications'
 
 import {
   TEMPLATE_VARIABLE_SELECTED,
@@ -25,6 +34,29 @@ export const loadDashboards = (dashboards, dashboardID) => ({
   payload: {
     dashboards,
     dashboardID,
+  },
+})
+
+export const loadDeafaultDashTimeV1 = dashboardID => ({
+  type: 'ADD_DASHBOARD_TIME_V1',
+  payload: {
+    dashboardID,
+  },
+})
+
+export const addDashTimeV1 = (dashboardID, timeRange) => ({
+  type: 'ADD_DASHBOARD_TIME_V1',
+  payload: {
+    dashboardID,
+    timeRange,
+  },
+})
+
+export const setDashTimeV1 = (dashboardID, timeRange) => ({
+  type: 'SET_DASHBOARD_TIME_V1',
+  payload: {
+    dashboardID,
+    timeRange,
   },
 })
 
@@ -46,6 +78,7 @@ export const deleteDashboard = dashboard => ({
   type: 'DELETE_DASHBOARD',
   payload: {
     dashboard,
+    dashboardID: dashboard.id,
   },
 })
 
@@ -158,11 +191,27 @@ export const editTemplateVariableValues = (
   },
 })
 
+export const setHoverTime = hoverTime => ({
+  type: 'SET_HOVER_TIME',
+  payload: {
+    hoverTime,
+  },
+})
+
+export const setActiveCell = activeCellID => ({
+  type: 'SET_ACTIVE_CELL',
+  payload: {
+    activeCellID,
+  },
+})
+
 // Async Action Creators
 
 export const getDashboardsAsync = () => async dispatch => {
   try {
-    const {data: {dashboards}} = await getDashboardsAJAX()
+    const {
+      data: {dashboards},
+    } = await getDashboardsAJAX()
     dispatch(loadDashboards(dashboards))
     return dashboards
   } catch (error) {
@@ -171,10 +220,39 @@ export const getDashboardsAsync = () => async dispatch => {
   }
 }
 
+const removeUnselectedTemplateValues = dashboard => {
+  const templates = dashboard.templates.map(template => {
+    if (template.type === 'csv') {
+      return template
+    }
+
+    const value = template.values.find(val => val.selected)
+    const values = value ? [value] : []
+
+    return {...template, values}
+  })
+  return templates
+}
+
 export const putDashboard = dashboard => async dispatch => {
   try {
-    const {data} = await updateDashboardAJAX(dashboard)
-    dispatch(updateDashboard(data))
+    // save only selected template values to server
+    const templatesWithOnlySelectedValues = removeUnselectedTemplateValues(
+      dashboard
+    )
+    const {
+      data: dashboardWithOnlySelectedTemplateValues,
+    } = await updateDashboardAJAX({
+      ...dashboard,
+      templates: templatesWithOnlySelectedValues,
+    })
+    // save all template values to redux
+    dispatch(
+      updateDashboard({
+        ...dashboardWithOnlySelectedTemplateValues,
+        templates: dashboard.templates,
+      })
+    )
   } catch (error) {
     console.error(error)
     dispatch(errorThrown(error))
@@ -183,9 +261,12 @@ export const putDashboard = dashboard => async dispatch => {
 
 export const putDashboardByID = dashboardID => async (dispatch, getState) => {
   try {
-    const {dashboardUI: {dashboards}} = getState()
+    const {
+      dashboardUI: {dashboards},
+    } = getState()
     const dashboard = dashboards.find(d => d.id === +dashboardID)
-    await updateDashboardAJAX(dashboard)
+    const templates = removeUnselectedTemplateValues(dashboard)
+    await updateDashboardAJAX({...dashboard, templates})
   } catch (error) {
     console.error(error)
     dispatch(errorThrown(error))
@@ -206,27 +287,41 @@ export const deleteDashboardAsync = dashboard => async dispatch => {
   dispatch(deleteDashboard(dashboard))
   try {
     await deleteDashboardAJAX(dashboard)
-    dispatch(
-      publishAutoDismissingNotification(
-        'success',
-        'Dashboard deleted successfully.'
-      )
-    )
+    dispatch(notify(notifyDashboardDeleted(dashboard.name)))
   } catch (error) {
     dispatch(
-      errorThrown(error, `Failed to delete dashboard: ${error.data.message}.`)
+      errorThrown(
+        error,
+        notifyDashboardDeleteFailed(dashboard.name, error.data.message)
+      )
     )
     dispatch(deleteDashboardFailed(dashboard))
   }
 }
 
-export const addDashboardCellAsync = dashboard => async dispatch => {
+export const addDashboardCellAsync = (
+  dashboard,
+  cellType
+) => async dispatch => {
   try {
     const {data} = await addDashboardCellAJAX(
       dashboard,
-      NEW_DEFAULT_DASHBOARD_CELL
+      getNewDashboardCell(dashboard, cellType)
     )
     dispatch(addDashboardCell(dashboard, data))
+    dispatch(notify(notifyCellAdded(data.name)))
+  } catch (error) {
+    console.error(error)
+    dispatch(errorThrown(error))
+  }
+}
+
+export const cloneDashboardCellAsync = (dashboard, cell) => async dispatch => {
+  try {
+    const clonedCell = getClonedDashboardCell(dashboard, cell)
+    const {data} = await addDashboardCellAJAX(dashboard, clonedCell)
+    dispatch(addDashboardCell(dashboard, data))
+    dispatch(notify(notifyCellAdded(clonedCell.name)))
   } catch (error) {
     console.error(error)
     dispatch(errorThrown(error))
@@ -237,6 +332,7 @@ export const deleteDashboardCellAsync = (dashboard, cell) => async dispatch => {
   try {
     await deleteDashboardCellAJAX(cell)
     dispatch(deleteDashboardCell(dashboard, cell))
+    dispatch(notify(notifyCellDeleted(cell.name)))
   } catch (error) {
     console.error(error)
     dispatch(errorThrown(error))
@@ -257,7 +353,8 @@ export const updateTempVarValues = (source, dashboard) => async dispatch => {
 
     results.forEach(({data}, i) => {
       const {type, query, id} = tempsWithQueries[i]
-      const vals = parsers[type](data, query.tagKey || query.measurement)[type]
+      const parsed = parsers[type](data, query.tagKey || query.measurement)
+      const vals = parsed[type]
       dispatch(editTemplateVariableValues(dashboard.id, id, vals))
     })
   } catch (error) {

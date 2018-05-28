@@ -1,4 +1,4 @@
-import AJAX from 'utils/ajax'
+import AJAX from 'src/utils/ajax'
 import _ from 'lodash'
 import {buildInfluxUrl, proxy} from 'utils/queryUrlGenerator'
 
@@ -24,8 +24,8 @@ export function showQueries(source, db) {
   return proxy({source, query, db})
 }
 
-export function killQuery(source, queryId) {
-  const query = `KILL QUERY ${queryId}`
+export function killQuery(source, queryID) {
+  const query = `KILL QUERY ${queryID}`
 
   return proxy({source, query})
 }
@@ -54,7 +54,10 @@ export const showTagValues = async ({
   measurement,
   tagKeys,
 }) => {
-  const keys = tagKeys.sort().map(k => `"${k}"`).join(', ')
+  const keys = tagKeys
+    .sort()
+    .map(k => `"${k}"`)
+    .join(', ')
   const rp = _.toString(retentionPolicy)
   const query = `SHOW TAG VALUES FROM "${rp}"."${measurement}" WITH KEY IN (${keys})`
 

@@ -76,7 +76,44 @@ func Vars(rule chronograf.AlertRule) (string, error) {
 	}
 }
 
+// NotEmpty is an error collector checking if strings are empty values
+type NotEmpty struct {
+	Err error
+}
+
+// Valid checks if string s is empty and if so reports an error using name
+func (n *NotEmpty) Valid(name, s string) error {
+	if n.Err != nil {
+		return n.Err
+
+	}
+	if s == "" {
+		n.Err = fmt.Errorf("%s cannot be an empty string", name)
+	}
+	return n.Err
+}
+
+// Escape sanitizes strings with single quotes for kapacitor
+func Escape(str string) string {
+	return strings.Replace(str, "'", `\'`, -1)
+}
+
 func commonVars(rule chronograf.AlertRule) (string, error) {
+	n := new(NotEmpty)
+	n.Valid("database", rule.Query.Database)
+	n.Valid("retention policy", rule.Query.RetentionPolicy)
+	n.Valid("measurement", rule.Query.Measurement)
+	n.Valid("alert name", rule.Name)
+	n.Valid("trigger type", rule.Trigger)
+	if n.Err != nil {
+		return "", n.Err
+	}
+
+	wind, err := window(rule)
+	if err != nil {
+		return "", err
+	}
+
 	common := `
         var db = '%s'
         var rp = '%s'
@@ -86,7 +123,7 @@ func commonVars(rule chronograf.AlertRule) (string, error) {
 		%s
 
 		var name = '%s'
-		var idVar = name + ':{{.Group}}'
+		var idVar = %s
 		var message = '%s'
 		var idTag = '%s'
 		var levelTag = '%s'
@@ -99,14 +136,15 @@ func commonVars(rule chronograf.AlertRule) (string, error) {
         var triggerType = '%s'
     `
 	res := fmt.Sprintf(common,
-		rule.Query.Database,
-		rule.Query.RetentionPolicy,
-		rule.Query.Measurement,
+		Escape(rule.Query.Database),
+		Escape(rule.Query.RetentionPolicy),
+		Escape(rule.Query.Measurement),
 		groupBy(rule.Query),
 		whereFilter(rule.Query),
-		window(rule),
-		rule.Name,
-		rule.Message,
+		wind,
+		Escape(rule.Name),
+		idVar(rule.Query),
+		Escape(rule.Message),
 		IDTag,
 		LevelTag,
 		MessageField,
@@ -127,17 +165,27 @@ func commonVars(rule chronograf.AlertRule) (string, error) {
 
 // window is only used if deadman or threshold/relative with aggregate.  Will return empty
 // if no period.
-func window(rule chronograf.AlertRule) string {
+func window(rule chronograf.AlertRule) (string, error) {
 	if rule.Trigger == Deadman {
-		return fmt.Sprintf("var period = %s", rule.TriggerValues.Period)
+		if rule.TriggerValues.Period == "" {
+			return "", fmt.Errorf("period cannot be an empty string in deadman alert")
+		}
+		return fmt.Sprintf("var period = %s", rule.TriggerValues.Period), nil
+
 	}
 	// Period only makes sense if the field has a been grouped via a time duration.
 	for _, field := range rule.Query.Fields {
-		if len(field.Funcs) > 0 {
-			return fmt.Sprintf("var period = %s\nvar every = %s", rule.Query.GroupBy.Time, rule.Every)
+		if field.Type == "func" {
+			n := new(NotEmpty)
+			n.Valid("group by time", rule.Query.GroupBy.Time)
+			n.Valid("every", rule.Every)
+			if n.Err != nil {
+				return "", n.Err
+			}
+			return fmt.Sprintf("var period = %s\nvar every = %s", rule.Query.GroupBy.Time, rule.Every), nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func groupBy(q *chronograf.QueryConfig) string {
@@ -150,13 +198,38 @@ func groupBy(q *chronograf.QueryConfig) string {
 	return "[" + strings.Join(groups, ",") + "]"
 }
 
-func field(q *chronograf.QueryConfig) (string, error) {
-	if q != nil {
-		for _, field := range q.Fields {
-			return field.Field, nil
-		}
+func idVar(q *chronograf.QueryConfig) string {
+	if len(q.GroupBy.Tags) > 0 {
+		return `name + ':{{.Group}}'`
 	}
-	return "", fmt.Errorf("No fields set in query")
+	return "name"
+}
+
+func field(q *chronograf.QueryConfig) (string, error) {
+	if q == nil {
+		return "", fmt.Errorf("No fields set in query")
+	}
+	if len(q.Fields) != 1 {
+		return "", fmt.Errorf("expect only one field but found %d", len(q.Fields))
+	}
+	field := q.Fields[0]
+	if field.Type == "func" {
+		for _, arg := range field.Args {
+			if arg.Type == "field" {
+				f, ok := arg.Value.(string)
+				if !ok {
+					return "", fmt.Errorf("field value %v is should be string but is %T", arg.Value, arg.Value)
+				}
+				return f, nil
+			}
+		}
+		return "", fmt.Errorf("No fields set in query")
+	}
+	f, ok := field.Value.(string)
+	if !ok {
+		return "", fmt.Errorf("field value %v is should be string but is %T", field.Value, field.Value)
+	}
+	return f, nil
 }
 
 func whereFilter(q *chronograf.QueryConfig) string {
@@ -189,5 +262,10 @@ func formatValue(value string) string {
 	if _, err := strconv.ParseFloat(value, 64); err == nil {
 		return value
 	}
-	return "'" + value + "'"
+
+	// If the value is a kapacitor boolean value perform no formatting
+	if value == "TRUE" || value == "FALSE" {
+		return value
+	}
+	return "'" + Escape(value) + "'"
 }

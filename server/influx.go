@@ -1,11 +1,14 @@
 package server
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/influxdata/chronograf"
 	"github.com/influxdata/chronograf/influx"
@@ -24,40 +27,40 @@ type postInfluxResponse struct {
 }
 
 // Influx proxies requests to influxdb.
-func (h *Service) Influx(w http.ResponseWriter, r *http.Request) {
+func (s *Service) Influx(w http.ResponseWriter, r *http.Request) {
 	id, err := paramID("id", r)
 	if err != nil {
-		Error(w, http.StatusUnprocessableEntity, err.Error(), h.Logger)
+		Error(w, http.StatusUnprocessableEntity, err.Error(), s.Logger)
 		return
 	}
 
 	var req chronograf.Query
 	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-		invalidJSON(w, h.Logger)
+		invalidJSON(w, s.Logger)
 		return
 	}
 	if err = ValidInfluxRequest(req); err != nil {
-		invalidData(w, err, h.Logger)
+		invalidData(w, err, s.Logger)
 		return
 	}
 
 	ctx := r.Context()
-	src, err := h.SourcesStore.Get(ctx, id)
+	src, err := s.Store.Sources(ctx).Get(ctx, id)
 	if err != nil {
-		notFound(w, id, h.Logger)
+		notFound(w, id, s.Logger)
 		return
 	}
 
-	ts, err := h.TimeSeries(src)
+	ts, err := s.TimeSeries(src)
 	if err != nil {
 		msg := fmt.Sprintf("Unable to connect to source %d: %v", id, err)
-		Error(w, http.StatusBadRequest, msg, h.Logger)
+		Error(w, http.StatusBadRequest, msg, s.Logger)
 		return
 	}
 
 	if err = ts.Connect(ctx, &src); err != nil {
 		msg := fmt.Sprintf("Unable to connect to source %d: %v", id, err)
-		Error(w, http.StatusBadRequest, msg, h.Logger)
+		Error(w, http.StatusBadRequest, msg, s.Logger)
 		return
 	}
 
@@ -65,38 +68,38 @@ func (h *Service) Influx(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err == chronograf.ErrUpstreamTimeout {
 			msg := "Timeout waiting for Influx response"
-			Error(w, http.StatusRequestTimeout, msg, h.Logger)
+			Error(w, http.StatusRequestTimeout, msg, s.Logger)
 			return
 		}
 		// TODO: Here I want to return the error code from influx.
-		Error(w, http.StatusBadRequest, err.Error(), h.Logger)
+		Error(w, http.StatusBadRequest, err.Error(), s.Logger)
 		return
 	}
 
 	res := postInfluxResponse{
 		Results: response,
 	}
-	encodeJSON(w, http.StatusOK, res, h.Logger)
+	encodeJSON(w, http.StatusOK, res, s.Logger)
 }
 
-func (h *Service) Write(w http.ResponseWriter, r *http.Request) {
+func (s *Service) Write(w http.ResponseWriter, r *http.Request) {
 	id, err := paramID("id", r)
 	if err != nil {
-		Error(w, http.StatusUnprocessableEntity, err.Error(), h.Logger)
+		Error(w, http.StatusUnprocessableEntity, err.Error(), s.Logger)
 		return
 	}
 
 	ctx := r.Context()
-	src, err := h.SourcesStore.Get(ctx, id)
+	src, err := s.Store.Sources(ctx).Get(ctx, id)
 	if err != nil {
-		notFound(w, id, h.Logger)
+		notFound(w, id, s.Logger)
 		return
 	}
 
 	u, err := url.Parse(src.URL)
 	if err != nil {
 		msg := fmt.Sprintf("Error parsing source url: %v", err)
-		Error(w, http.StatusUnprocessableEntity, msg, h.Logger)
+		Error(w, http.StatusUnprocessableEntity, msg, s.Logger)
 		return
 	}
 	u.Path = "/write"
@@ -111,8 +114,29 @@ func (h *Service) Write(w http.ResponseWriter, r *http.Request) {
 		auth := influx.DefaultAuthorization(&src)
 		auth.Set(req)
 	}
+
 	proxy := &httputil.ReverseProxy{
 		Director: director,
 	}
+
+	// The connection to influxdb is using a self-signed certificate.
+	// This modifies uses the same values as http.DefaultTransport but specifies
+	// InsecureSkipVerify
+	if src.InsecureSkipVerify {
+		proxy.Transport = &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
 	proxy.ServeHTTP(w, r)
 }

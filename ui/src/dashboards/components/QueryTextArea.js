@@ -1,9 +1,11 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import _ from 'lodash'
 import classnames from 'classnames'
 
 import TemplateDrawer from 'shared/components/TemplateDrawer'
 import QueryStatus from 'shared/components/QueryStatus'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
 import {
   MATCH_INCOMPLETE_TEMPLATES,
@@ -12,6 +14,7 @@ import {
   unMask,
 } from 'src/dashboards/constants'
 
+@ErrorHandling
 class QueryTextArea extends Component {
   constructor(props) {
     super(props)
@@ -184,7 +187,9 @@ class QueryTextArea extends Component {
   }
 
   render() {
-    const {config: {status}} = this.props
+    const {
+      config: {status},
+    } = this.props
     const {
       value,
       isTemplating,
@@ -214,15 +219,15 @@ class QueryTextArea extends Component {
               <QueryStatus status={status} />
             </div>
             <div className="varmoji-back">
-              {isTemplating
-                ? <TemplateDrawer
-                    onClickTempVar={this.handleClickTempVar}
-                    templates={filteredTemplates}
-                    selected={selectedTemplate}
-                    onMouseOverTempVar={this.handleMouseOverTempVar}
-                    handleClickOutside={this.handleCloseDrawer}
-                  />
-                : null}
+              {isTemplating ? (
+                <TemplateDrawer
+                  onClickTempVar={this.handleClickTempVar}
+                  templates={filteredTemplates}
+                  selected={selectedTemplate}
+                  onMouseOverTempVar={this.handleMouseOverTempVar}
+                  handleClickOutside={this.handleCloseDrawer}
+                />
+              ) : null}
             </div>
           </div>
         </div>

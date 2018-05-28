@@ -1,10 +1,13 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 
 import {showDatabases, showRetentionPolicies} from 'shared/apis/metaQuery'
 import showDatabasesParser from 'shared/parsing/showDatabases'
 import showRetentionPoliciesParser from 'shared/parsing/showRetentionPolicies'
 import MultiSelectDropdown from 'shared/components/MultiSelectDropdown'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class MultiSelectDBDropdown extends Component {
   constructor(props) {
     super(props)
@@ -34,7 +37,11 @@ class MultiSelectDBDropdown extends Component {
   }
 
   _getDbRps = async () => {
-    const {source: {links: {proxy}}} = this.context
+    const {
+      source: {
+        links: {proxy},
+      },
+    } = this.context
     const {onErrorThrown} = this.props
 
     try {

@@ -1,4 +1,5 @@
-import React, {PropTypes} from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
 
 import _ from 'lodash'
 
@@ -28,12 +29,13 @@ const ValuesSection = ({
   timeRange,
   onAddEvery,
   onRemoveEvery,
+  onChooseTrigger,
   onDeadmanChange,
+  onChooseTimeRange,
   queryConfigActions,
   onRuleTypeInputChange,
   onRuleTypeDropdownChange,
-  onChooseTrigger,
-}) =>
+}) => (
   <div className="rule-section">
     <h3 className="rule-section--heading">Alert Type</h3>
     <div className="rule-section--body">
@@ -42,14 +44,14 @@ const ValuesSection = ({
         onSelect={handleChooseTrigger(rule, onChooseTrigger)}
       >
         <TabList isKapacitorTabs="true">
-          {TABS.map(tab =>
+          {TABS.map(tab => (
             <Tab key={tab} isKapacitorTab={true}>
               {tab}
             </Tab>
-          )}
+          ))}
         </TabList>
         <div>
-          <h3 className="rule-builder--sub-header">Time Series</h3>
+          <h3 className="rule-section--sub-heading">Time Series</h3>
           <DataSection
             query={query}
             timeRange={timeRange}
@@ -60,7 +62,7 @@ const ValuesSection = ({
             isDeadman={isDeadman(rule)}
           />
         </div>
-        <h3 className="rule-builder--sub-header">Rule Conditions</h3>
+        <h3 className="rule-section--sub-heading">Conditions</h3>
         <TabPanels>
           <TabPanel>
             <Threshold
@@ -81,17 +83,19 @@ const ValuesSection = ({
             <Deadman rule={rule} onChange={onDeadmanChange} />
           </TabPanel>
         </TabPanels>
-        {isDeadman(rule)
-          ? null
-          : <RuleGraph
-              rule={rule}
-              query={query}
-              source={source}
-              timeRange={timeRange}
-            />}
+        {isDeadman(rule) ? null : (
+          <RuleGraph
+            rule={rule}
+            query={query}
+            source={source}
+            timeRange={timeRange}
+            onChooseTimeRange={onChooseTimeRange}
+          />
+        )}
       </Tabs>
     </div>
   </div>
+)
 
 const {shape, string, func} = PropTypes
 
@@ -110,6 +114,7 @@ ValuesSection.propTypes = {
   timeRange: shape({}).isRequired,
   queryConfigActions: shape({}).isRequired,
   source: shape({}).isRequired,
+  onChooseTimeRange: func.isRequired,
 }
 
 export default ValuesSection

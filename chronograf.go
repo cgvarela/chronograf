@@ -1,36 +1,43 @@
 package chronograf
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"regexp"
-	"strconv"
-	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
-
-	"github.com/influxdata/influxdb/influxql"
 )
 
 // General errors.
 const (
-	ErrUpstreamTimeout   = Error("request to backend timed out")
-	ErrSourceNotFound    = Error("source not found")
-	ErrServerNotFound    = Error("server not found")
-	ErrLayoutNotFound    = Error("layout not found")
-	ErrDashboardNotFound = Error("dashboard not found")
-	ErrUserNotFound      = Error("user not found")
-	ErrLayoutInvalid     = Error("layout is invalid")
-	ErrAlertNotFound     = Error("alert not found")
-	ErrAuthentication    = Error("user not authenticated")
-	ErrUninitialized     = Error("client uninitialized. Call Open() method")
-	ErrInvalidAxis       = Error("Unexpected axis in cell. Valid axes are 'x', 'y', and 'y2'")
+	ErrUpstreamTimeout                 = Error("request to backend timed out")
+	ErrSourceNotFound                  = Error("source not found")
+	ErrServerNotFound                  = Error("server not found")
+	ErrLayoutNotFound                  = Error("layout not found")
+	ErrDashboardNotFound               = Error("dashboard not found")
+	ErrUserNotFound                    = Error("user not found")
+	ErrLayoutInvalid                   = Error("layout is invalid")
+	ErrDashboardInvalid                = Error("dashboard is invalid")
+	ErrSourceInvalid                   = Error("source is invalid")
+	ErrServerInvalid                   = Error("server is invalid")
+	ErrAlertNotFound                   = Error("alert not found")
+	ErrAuthentication                  = Error("user not authenticated")
+	ErrUninitialized                   = Error("client uninitialized. Call Open() method")
+	ErrInvalidAxis                     = Error("Unexpected axis in cell. Valid axes are 'x', 'y', and 'y2'")
+	ErrInvalidColorType                = Error("Invalid color type. Valid color types are 'min', 'max', 'threshold', 'text', and 'background'")
+	ErrInvalidColor                    = Error("Invalid color. Accepted color format is #RRGGBB")
+	ErrInvalidLegend                   = Error("Invalid legend. Both type and orientation must be set")
+	ErrInvalidLegendType               = Error("Invalid legend type. Valid legend type is 'static'")
+	ErrInvalidLegendOrient             = Error("Invalid orientation type. Valid orientation types are 'top', 'bottom', 'right', 'left'")
+	ErrUserAlreadyExists               = Error("user already exists")
+	ErrOrganizationNotFound            = Error("organization not found")
+	ErrMappingNotFound                 = Error("mapping not found")
+	ErrOrganizationAlreadyExists       = Error("organization already exists")
+	ErrCannotDeleteDefaultOrganization = Error("cannot delete default organization")
+	ErrConfigNotFound                  = Error("cannot find configuration")
+	ErrAnnotationNotFound              = Error("annotation not found")
+	ErrInvalidCellOptionsText          = Error("invalid text wrapping option. Valid wrappings are 'truncate', 'wrap', and 'single line'")
+	ErrInvalidCellOptionsSort          = Error("cell options sortby cannot be empty'")
+	ErrInvalidCellOptionsColumns       = Error("cell options columns cannot be empty'")
 )
 
 // Error is a domain error encountered while processing chronograf requests
@@ -95,12 +102,24 @@ type TSDBStatus interface {
 	Type(context.Context) (string, error)
 }
 
+// Point is a field set in a series
+type Point struct {
+	Database        string
+	RetentionPolicy string
+	Measurement     string
+	Time            int64
+	Tags            map[string]string
+	Fields          map[string]interface{}
+}
+
 // TimeSeries represents a queryable time series database.
 type TimeSeries interface {
-	// Query retrieves time series data from the database.
-	Query(context.Context, Query) (Response, error)
 	// Connect will connect to the time series using the information in `Source`.
 	Connect(context.Context, *Source) error
+	// Query retrieves time series data from the database.
+	Query(context.Context, Query) (Response, error)
+	// Write records points into a series
+	Write(context.Context, []Point) error
 	// UsersStore represents the user accounts within the TimeSeries database
 	Users(context.Context) UsersStore
 	// Permissions returns all valid names permissions in this database
@@ -111,9 +130,10 @@ type TimeSeries interface {
 
 // Role is a restricted set of permissions assigned to a set of users.
 type Role struct {
-	Name        string      `json:"name"`
-	Permissions Permissions `json:"permissions,omitempty"`
-	Users       []User      `json:"users,omitempty"`
+	Name         string      `json:"name"`
+	Permissions  Permissions `json:"permissions,omitempty"`
+	Users        []User      `json:"users,omitempty"`
+	Organization string      `json:"organization,omitempty"`
 }
 
 // RolesStore is the Storage and retrieval of authentication information
@@ -136,181 +156,17 @@ type Range struct {
 	Lower int64 `json:"lower"` // Lower is the lower bound
 }
 
-type TemplateVariable interface {
-	fmt.Stringer
-	Name() string     // returns the variable name
-	Precedence() uint // ordinal indicating precedence level for replacement
-}
-
-type ExecutableVar interface {
-	Exec(string)
-}
-
 // TemplateValue is a value use to replace a template in an InfluxQL query
-type BasicTemplateValue struct {
+type TemplateValue struct {
 	Value    string `json:"value"`    // Value is the specific value used to replace a template in an InfluxQL query
 	Type     string `json:"type"`     // Type can be tagKey, tagValue, fieldKey, csv, measurement, database, constant
 	Selected bool   `json:"selected"` // Selected states that this variable has been picked to use for replacement
 }
 
 // TemplateVar is a named variable within an InfluxQL query to be replaced with Values
-type BasicTemplateVar struct {
-	Var    string               `json:"tempVar"` // Var is the string to replace within InfluxQL
-	Values []BasicTemplateValue `json:"values"`  // Values are the replacement values within InfluxQL
-}
-
-func (t BasicTemplateVar) Name() string {
-	return t.Var
-}
-
-// String converts the template variable into a correct InfluxQL string based
-// on its type
-func (t BasicTemplateVar) String() string {
-	if len(t.Values) == 0 {
-		return ""
-	}
-	switch t.Values[0].Type {
-	case "tagKey", "fieldKey", "measurement", "database":
-		return `"` + t.Values[0].Value + `"`
-	case "tagValue", "timeStamp":
-		return `'` + t.Values[0].Value + `'`
-	case "csv", "constant":
-		return t.Values[0].Value
-	default:
-		return ""
-	}
-}
-
-func (t BasicTemplateVar) Precedence() uint {
-	return 0
-}
-
-type GroupByVar struct {
-	Var               string        `json:"tempVar"`                     // the name of the variable as present in the query
-	Duration          time.Duration `json:"duration,omitempty"`          // the Duration supplied by the query
-	Resolution        uint          `json:"resolution"`                  // the available screen resolution to render the results of this query
-	ReportingInterval time.Duration `json:"reportingInterval,omitempty"` // the interval at which data is reported to this series
-}
-
-// Exec is responsible for extracting the Duration from the query
-func (g *GroupByVar) Exec(query string) {
-	whereClause := "WHERE"
-	start := strings.Index(query, whereClause)
-	if start == -1 {
-		// no where clause
-		return
-	}
-
-	// reposition start to after the 'where' keyword
-	durStr := query[start+len(whereClause):]
-
-	// attempt to parse out a relative time range
-	dur, err := g.parseRelative(durStr)
-	if err == nil {
-		// we parsed relative duration successfully
-		g.Duration = dur
-		return
-	}
-
-	dur, err = g.parseAbsolute(durStr)
-	if err == nil {
-		// we found an absolute time range
-		g.Duration = dur
-	}
-}
-
-// parseRelative locates and extracts a duration value from a fragment of an
-// InfluxQL query following the "where" keyword. For example, in the fragment
-// "time > now() - 180d GROUP BY :interval:", parseRelative would return a
-// duration equal to 180d
-func (g *GroupByVar) parseRelative(fragment string) (time.Duration, error) {
-	// locate duration literal start
-	prefix := "time > now() - "
-	start := strings.Index(fragment, prefix)
-	if start == -1 {
-		return time.Duration(0), errors.New("not a relative duration")
-	}
-
-	// reposition to duration literal
-	durFragment := fragment[start+len(prefix):]
-
-	// init counters
-	pos := 0
-
-	// locate end of duration literal
-	for pos < len(durFragment) {
-		rn, _ := utf8.DecodeRuneInString(durFragment[pos:])
-		if unicode.IsSpace(rn) {
-			break
-		}
-		pos++
-	}
-
-	// attempt to parse what we suspect is a duration literal
-	dur, err := influxql.ParseDuration(durFragment[:pos])
-	if err != nil {
-		return dur, err
-	}
-
-	return dur, nil
-}
-
-// parseAbsolute will determine the duration between two absolute timestamps
-// found within an InfluxQL fragment following the "where" keyword. For
-// example, the fragement "time > '1985-10-25T00:01:21-0800 and time <
-// '1985-10-25T00:01:22-0800'" would yield a duration of 1m'
-func (g *GroupByVar) parseAbsolute(fragment string) (time.Duration, error) {
-	timePtn := `time\s[>|<]\s'([0-9\-T\:\.Z]+)'` // Playground: http://gobular.com/x/208f66bd-1889-4269-ab47-1efdfeeb63f0
-	re, err := regexp.Compile(timePtn)
-	if err != nil {
-		// this is a developer error and should complain loudly
-		panic("Bad Regex: err:" + err.Error())
-	}
-
-	if !re.Match([]byte(fragment)) {
-		return time.Duration(0), errors.New("absolute duration not found")
-	}
-
-	// extract at most two times
-	matches := re.FindAll([]byte(fragment), 2)
-
-	// parse out absolute times
-	durs := make([]time.Time, 0, 2)
-	for _, match := range matches {
-		durStr := re.FindSubmatch(match)
-		if tm, err := time.Parse(time.RFC3339Nano, string(durStr[1])); err == nil {
-			durs = append(durs, tm)
-		}
-	}
-
-	if len(durs) == 1 {
-		durs = append(durs, time.Now())
-	}
-
-	// reject more than 2 times found
-	if len(durs) != 2 {
-		return time.Duration(0), errors.New("must provide exactly two absolute times")
-	}
-
-	dur := durs[1].Sub(durs[0])
-
-	return dur, nil
-}
-
-func (g *GroupByVar) String() string {
-	duration := int64(g.Duration/time.Second) / int64(g.Resolution) * 3
-	if duration == 0 {
-		duration = 1
-	}
-	return "time(" + strconv.Itoa(int(duration)) + "s)"
-}
-
-func (g *GroupByVar) Name() string {
-	return g.Var
-}
-
-func (g *GroupByVar) Precedence() uint {
-	return 1
+type TemplateVar struct {
+	Var    string          `json:"tempVar"` // Var is the string to replace within InfluxQL
+	Values []TemplateValue `json:"values"`  // Values are the replacement values within InfluxQL
 }
 
 // TemplateID is the unique ID used to identify a template
@@ -318,7 +174,7 @@ type TemplateID string
 
 // Template represents a series of choices to replace TemplateVars within InfluxQL
 type Template struct {
-	BasicTemplateVar
+	TemplateVar
 	ID    TemplateID     `json:"id"`              // ID is the unique ID associated with this template
 	Type  string         `json:"type"`            // Type can be fieldKeys, tagKeys, tagValues, CSV, constant, query, measurements, databases
 	Label string         `json:"label"`           // Label is a user-facing description of the Template
@@ -327,69 +183,16 @@ type Template struct {
 
 // Query retrieves a Response from a TimeSeries.
 type Query struct {
-	Command      string       `json:"query"`                // Command is the query itself
-	DB           string       `json:"db,omitempty"`         // DB is optional and if empty will not be used.
-	RP           string       `json:"rp,omitempty"`         // RP is a retention policy and optional; if empty will not be used.
-	TemplateVars TemplateVars `json:"tempVars,omitempty"`   // TemplateVars are template variables to replace within an InfluxQL query
-	Wheres       []string     `json:"wheres,omitempty"`     // Wheres restricts the query to certain attributes
-	GroupBys     []string     `json:"groupbys,omitempty"`   // GroupBys collate the query by these tags
-	Resolution   uint         `json:"resolution,omitempty"` // Resolution is the available screen resolution to render query results
-	Label        string       `json:"label,omitempty"`      // Label is the Y-Axis label for the data
-	Range        *Range       `json:"range,omitempty"`      // Range is the default Y-Axis range for the data
-}
-
-// TemplateVars are a heterogeneous collection of different TemplateVariables
-// with the capability to decode arbitrary JSON into the appropriate template
-// variable type
-type TemplateVars []TemplateVariable
-
-func (t *TemplateVars) UnmarshalJSON(text []byte) error {
-	// TODO: Need to test that server throws an error when :interval:'s Resolution or ReportingInterval or zero-value
-	rawVars := bytes.NewReader(text)
-	dec := json.NewDecoder(rawVars)
-
-	// read open bracket
-	rawTok, err := dec.Token()
-	if err != nil {
-		return err
-	}
-
-	tok, isDelim := rawTok.(json.Delim)
-	if !isDelim || tok != '[' {
-		return errors.New("Expected JSON array, but found " + tok.String())
-	}
-
-	for dec.More() {
-		var halfBakedVar json.RawMessage
-		err := dec.Decode(&halfBakedVar)
-		if err != nil {
-			return err
-		}
-
-		var agb GroupByVar
-		err = json.Unmarshal(halfBakedVar, &agb)
-		if err != nil {
-			return err
-		}
-
-		// ensure that we really have a GroupByVar
-		if agb.Resolution != 0 {
-			(*t) = append(*t, &agb)
-			continue
-		}
-
-		var tvar BasicTemplateVar
-		err = json.Unmarshal(halfBakedVar, &tvar)
-		if err != nil {
-			return err
-		}
-
-		// ensure that we really have a BasicTemplateVar
-		if len(tvar.Values) != 0 {
-			(*t) = append(*t, tvar)
-		}
-	}
-	return nil
+	Command      string        `json:"query"`                // Command is the query itself
+	DB           string        `json:"db,omitempty"`         // DB is optional and if empty will not be used.
+	RP           string        `json:"rp,omitempty"`         // RP is a retention policy and optional; if empty will not be used.
+	Epoch        string        `json:"epoch,omitempty"`      // Epoch is the time format for the return results
+	TemplateVars []TemplateVar `json:"tempVars,omitempty"`   // TemplateVars are template variables to replace within an InfluxQL query
+	Wheres       []string      `json:"wheres,omitempty"`     // Wheres restricts the query to certain attributes
+	GroupBys     []string      `json:"groupbys,omitempty"`   // GroupBys collate the query by these tags
+	Resolution   uint          `json:"resolution,omitempty"` // Resolution is the available screen resolution to render query results
+	Label        string        `json:"label,omitempty"`      // Label is the Y-Axis label for the data
+	Range        *Range        `json:"range,omitempty"`      // Range is the default Y-Axis range for the data
 }
 
 // DashboardQuery includes state for the query builder.  This is a transition
@@ -400,6 +203,7 @@ type DashboardQuery struct {
 	Range       *Range      `json:"range,omitempty"`       // Range is the default Y-Axis range for the data
 	QueryConfig QueryConfig `json:"queryConfig,omitempty"` // QueryConfig represents the query state that is understood by the data explorer
 	Source      string      `json:"source"`                // Source is the optional URI to the data source for this queryConfig
+	Shifts      []TimeShift `json:"-"`                     // Shifts represents shifts to apply to an influxql query's time range.  Clients expect the shift to be in the generated QueryConfig
 }
 
 // TemplateQuery is used to retrieve choices for template replacement
@@ -430,6 +234,9 @@ type Source struct {
 	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty"` // InsecureSkipVerify as true means any certificate presented by the source is accepted.
 	Default            bool   `json:"default"`                      // Default specifies the default source for the application
 	Telegraf           string `json:"telegraf"`                     // Telegraf is the db telegraf is written to.  By default it is "telegraf"
+	Organization       string `json:"organization"`                 // Organization is the organization ID that resource belongs to
+	Role               string `json:"role,omitempty"`               // Not Currently Used. Role is the name of the minimum role that a user must possess to access the resource.
+	DefaultRP          string `json:"defaultRP"`                    // DefaultRP is the default retention policy used in database queries to this source
 }
 
 // SourcesStore stores connection information for a `TimeSeries`
@@ -446,6 +253,7 @@ type SourcesStore interface {
 	Update(context.Context, Source) error
 }
 
+// DBRP represents a database and retention policy for a time series source
 type DBRP struct {
 	DB string `json:"db"`
 	RP string `json:"rp"`
@@ -453,25 +261,24 @@ type DBRP struct {
 
 // AlertRule represents rules for building a tickscript alerting task
 type AlertRule struct {
-	ID            string          `json:"id,omitempty"`           // ID is the unique ID of the alert
-	TICKScript    TICKScript      `json:"tickscript"`             // TICKScript is the raw tickscript associated with this Alert
-	Query         *QueryConfig    `json:"query"`                  // Query is the filter of data for the alert.
-	Every         string          `json:"every"`                  // Every how often to check for the alerting criteria
-	Alerts        []string        `json:"alerts"`                 // Alerts name all the services to notify (e.g. pagerduty)
-	AlertNodes    []KapacitorNode `json:"alertNodes,omitempty"`   // AlertNodes define additional arguments to alerts
-	Message       string          `json:"message"`                // Message included with alert
-	Details       string          `json:"details"`                // Details is generally used for the Email alert.  If empty will not be added.
-	Trigger       string          `json:"trigger"`                // Trigger is a type that defines when to trigger the alert
-	TriggerValues TriggerValues   `json:"values"`                 // Defines the values that cause the alert to trigger
-	Name          string          `json:"name"`                   // Name is the user-defined name for the alert
-	Type          string          `json:"type"`                   // Represents the task type where stream is data streamed to kapacitor and batch is queried by kapacitor
-	DBRPs         []DBRP          `json:"dbrps"`                  // List of database retention policy pairs the task is allowed to access
-	Status        string          `json:"status"`                 // Represents if this rule is enabled or disabled in kapacitor
-	Executing     bool            `json:"executing"`              // Whether the task is currently executing
-	Error         string          `json:"error"`                  // Any error encountered when kapacitor executes the task
-	Created       time.Time       `json:"created"`                // Date the task was first created
-	Modified      time.Time       `json:"modified"`               // Date the task was last modified
-	LastEnabled   time.Time       `json:"last-enabled,omitempty"` // Date the task was last set to status enabled
+	ID            string        `json:"id,omitempty"`           // ID is the unique ID of the alert
+	TICKScript    TICKScript    `json:"tickscript"`             // TICKScript is the raw tickscript associated with this Alert
+	Query         *QueryConfig  `json:"query"`                  // Query is the filter of data for the alert.
+	Every         string        `json:"every"`                  // Every how often to check for the alerting criteria
+	AlertNodes    AlertNodes    `json:"alertNodes"`             // AlertNodes defines the destinations for the alert
+	Message       string        `json:"message"`                // Message included with alert
+	Details       string        `json:"details"`                // Details is generally used for the Email alert.  If empty will not be added.
+	Trigger       string        `json:"trigger"`                // Trigger is a type that defines when to trigger the alert
+	TriggerValues TriggerValues `json:"values"`                 // Defines the values that cause the alert to trigger
+	Name          string        `json:"name"`                   // Name is the user-defined name for the alert
+	Type          string        `json:"type"`                   // Represents the task type where stream is data streamed to kapacitor and batch is queried by kapacitor
+	DBRPs         []DBRP        `json:"dbrps"`                  // List of database retention policy pairs the task is allowed to access
+	Status        string        `json:"status"`                 // Represents if this rule is enabled or disabled in kapacitor
+	Executing     bool          `json:"executing"`              // Whether the task is currently executing
+	Error         string        `json:"error"`                  // Any error encountered when kapacitor executes the task
+	Created       time.Time     `json:"created"`                // Date the task was first created
+	Modified      time.Time     `json:"modified"`               // Date the task was last modified
+	LastEnabled   time.Time     `json:"last-enabled,omitempty"` // Date the task was last set to status enabled
 }
 
 // TICKScript task to be used by kapacitor
@@ -495,8 +302,10 @@ type TriggerValues struct {
 
 // Field represent influxql fields and functions from the UI
 type Field struct {
-	Field string   `json:"field"`
-	Funcs []string `json:"funcs"`
+	Value interface{} `json:"value"`
+	Type  string      `json:"type"`
+	Alias string      `json:"alias"`
+	Args  []Field     `json:"args,omitempty"`
 }
 
 // GroupBy represents influxql group by tags from the UI
@@ -509,6 +318,13 @@ type GroupBy struct {
 type DurationRange struct {
 	Upper string `json:"upper"`
 	Lower string `json:"lower"`
+}
+
+// TimeShift represents a shift to apply to an influxql query's time range
+type TimeShift struct {
+	Label    string `json:"label"`    // Label user facing description
+	Unit     string `json:"unit"`     // Unit influxql time unit representation i.e. ms, s, m, h, d
+	Quantity string `json:"quantity"` // Quantity number of units
 }
 
 // QueryConfig represents UI query from the data explorer
@@ -524,6 +340,7 @@ type QueryConfig struct {
 	Fill            string              `json:"fill,omitempty"`
 	RawText         *string             `json:"rawText"`
 	Range           *DurationRange      `json:"range"`
+	Shifts          []TimeShift         `json:"shifts"`
 }
 
 // KapacitorNode adds arguments and properties to an alert
@@ -542,13 +359,17 @@ type KapacitorProperty struct {
 
 // Server represents a proxy connection to an HTTP server
 type Server struct {
-	ID       int    // ID is the unique ID of the server
-	SrcID    int    // SrcID of the data source
-	Name     string // Name is the user-defined name for the server
-	Username string // Username is the username to connect to the server
-	Password string // Password is in CLEARTEXT
-	URL      string // URL are the connections to the server
-	Active   bool   // Is this the active server for the source?
+	ID                 int                    `json:"id,string"`          // ID is the unique ID of the server
+	SrcID              int                    `json:"srcId,string"`       // SrcID of the data source
+	Name               string                 `json:"name"`               // Name is the user-defined name for the server
+	Username           string                 `json:"username"`           // Username is the username to connect to the server
+	Password           string                 `json:"password"`           // Password is in CLEARTEXT
+	URL                string                 `json:"url"`                // URL are the connections to the server
+	InsecureSkipVerify bool                   `json:"insecureSkipVerify"` // InsecureSkipVerify as true means any certificate presented by the server is accepted.
+	Active             bool                   `json:"active"`             // Is this the active server for the source?
+	Organization       string                 `json:"organization"`       // Organization is the organization ID that resource belongs to
+	Type               string                 `json:"type"`               // Type is the kind of service (e.g. kapacitor or ifql)
+	Metadata           map[string]interface{} `json:"metadata"`           // Metadata is any other data that the frontend wants to store about this service
 }
 
 // ServersStore stores connection information for a `Server`
@@ -597,13 +418,34 @@ type Scope string
 
 // User represents an authenticated user.
 type User struct {
+	ID          uint64      `json:"id,string,omitempty"`
 	Name        string      `json:"name"`
-	Passwd      string      `json:"password"`
+	Passwd      string      `json:"password,omitempty"`
 	Permissions Permissions `json:"permissions,omitempty"`
-	Roles       []Role      `json:"roles,omitempty"`
+	Roles       []Role      `json:"roles"`
+	Provider    string      `json:"provider,omitempty"`
+	Scheme      string      `json:"scheme,omitempty"`
+	SuperAdmin  bool        `json:"superAdmin,omitempty"`
+}
+
+// UserQuery represents the attributes that a user may be retrieved by.
+// It is predominantly used in the UsersStore.Get method.
+//
+// It is expected that only one of ID or Name, Provider, and Scheme will be
+// specified, but all are provided UserStores should prefer ID.
+type UserQuery struct {
+	ID       *uint64
+	Name     *string
+	Provider *string
+	Scheme   *string
 }
 
 // UsersStore is the Storage and retrieval of authentication information
+//
+// While not necessary for the app to function correctly, it is
+// expected that Implementors of the UsersStore will take
+// care to guarantee that the combinartion of a  users Name, Provider,
+// and Scheme are unique.
 type UsersStore interface {
 	// All lists all users from the UsersStore
 	All(context.Context) ([]User, error)
@@ -612,9 +454,11 @@ type UsersStore interface {
 	// Delete the User from the UsersStore
 	Delete(context.Context, *User) error
 	// Get retrieves a user if name exists.
-	Get(ctx context.Context, name string) (*User, error)
+	Get(ctx context.Context, q UserQuery) (*User, error)
 	// Update the user's permissions or roles
 	Update(context.Context, *User) error
+	// Num returns the number of users in the UsersStore
+	Num(context.Context) (int, error)
 }
 
 // Database represents a database in a time series source
@@ -634,17 +478,51 @@ type RetentionPolicy struct {
 	Default       bool   `json:"isDefault,omitempty"`     // whether the RP should be the default
 }
 
+// Measurement represents a measurement in a time series source
+type Measurement struct {
+	Name string `json:"name"` // a unique string identifier for the measurement
+}
+
 // Databases represents a databases in a time series source
 type Databases interface {
-	// All lists all databases
+	// AllDB lists all databases in the current data source
 	AllDB(context.Context) ([]Database, error)
+	// Connect connects to a database in the current data source
 	Connect(context.Context, *Source) error
+	// CreateDB creates a database in the current data source
 	CreateDB(context.Context, *Database) (*Database, error)
+	// DropDB drops a database in the current data source
 	DropDB(context.Context, string) error
+
+	// AllRP lists all retention policies in the current data source
 	AllRP(context.Context, string) ([]RetentionPolicy, error)
+	// CreateRP creates a retention policy in the current data source
 	CreateRP(context.Context, string, *RetentionPolicy) (*RetentionPolicy, error)
+	// UpdateRP updates a retention policy in the current data source
 	UpdateRP(context.Context, string, string, *RetentionPolicy) (*RetentionPolicy, error)
+	// DropRP drops a retention policy in the current data source
 	DropRP(context.Context, string, string) error
+
+	// GetMeasurements lists measurements in the current data source
+	GetMeasurements(ctx context.Context, db string, limit, offset int) ([]Measurement, error)
+}
+
+// Annotation represents a time-based metadata associated with a source
+type Annotation struct {
+	ID        string    // ID is the unique annotation identifier
+	StartTime time.Time // StartTime starts the annotation
+	EndTime   time.Time // EndTime ends the annotation
+	Text      string    // Text is the associated user-facing text describing the annotation
+	Type      string    // Type describes the kind of annotation
+}
+
+// AnnotationStore represents storage and retrieval of annotations
+type AnnotationStore interface {
+	All(ctx context.Context, start, stop time.Time) ([]Annotation, error) // All lists all Annotations between start and stop
+	Add(context.Context, *Annotation) (*Annotation, error)                // Add creates a new annotation in the store
+	Delete(ctx context.Context, id string) error                          // Delete removes the annotation from the store
+	Get(ctx context.Context, id string) (*Annotation, error)              // Get retrieves an annotation
+	Update(context.Context, *Annotation) error                            // Update replaces annotation
 }
 
 // DashboardID is the dashboard ID
@@ -652,10 +530,11 @@ type DashboardID int
 
 // Dashboard represents all visual and query data for a dashboard
 type Dashboard struct {
-	ID        DashboardID     `json:"id"`
-	Cells     []DashboardCell `json:"cells"`
-	Templates []Template      `json:"templates"`
-	Name      string          `json:"name"`
+	ID           DashboardID     `json:"id"`
+	Cells        []DashboardCell `json:"cells"`
+	Templates    []Template      `json:"templates"`
+	Name         string          `json:"name"`
+	Organization string          `json:"organization"` // Organization is the organization ID that resource belongs to
 }
 
 // Axis represents the visible extents of a visualization
@@ -669,17 +548,59 @@ type Axis struct {
 	Scale        string   `json:"scale"`  // Scale is the axis formatting scale. Supported: "log", "linear"
 }
 
+// CellColor represents the encoding of data into visualizations
+type CellColor struct {
+	ID    string `json:"id"`    // ID is the unique id of the cell color
+	Type  string `json:"type"`  // Type is how the color is used. Accepted (min,max,threshold)
+	Hex   string `json:"hex"`   // Hex is the hex number of the color
+	Name  string `json:"name"`  // Name is the user-facing name of the hex color
+	Value string `json:"value"` // Value is the data value mapped to this color
+}
+
+// Legend represents the encoding of data into a legend
+type Legend struct {
+	Type        string `json:"type,omitempty"`
+	Orientation string `json:"orientation,omitempty"`
+}
+
 // DashboardCell holds visual and query information for a cell
 type DashboardCell struct {
-	ID      string           `json:"i"`
-	X       int32            `json:"x"`
-	Y       int32            `json:"y"`
-	W       int32            `json:"w"`
-	H       int32            `json:"h"`
-	Name    string           `json:"name"`
-	Queries []DashboardQuery `json:"queries"`
-	Axes    map[string]Axis  `json:"axes"`
-	Type    string           `json:"type"`
+	ID            string           `json:"i"`
+	X             int32            `json:"x"`
+	Y             int32            `json:"y"`
+	W             int32            `json:"w"`
+	H             int32            `json:"h"`
+	Name          string           `json:"name"`
+	Queries       []DashboardQuery `json:"queries"`
+	Axes          map[string]Axis  `json:"axes"`
+	Type          string           `json:"type"`
+	CellColors    []CellColor      `json:"colors"`
+	Legend        Legend           `json:"legend"`
+	TableOptions  TableOptions     `json:"tableOptions,omitempty"`
+	FieldOptions  []RenamableField `json:"fieldOptions"`
+	TimeFormat    string           `json:"timeFormat"`
+	DecimalPlaces DecimalPlaces    `json:"decimalPlaces"`
+}
+
+// RenamableField is a column/row field in a DashboardCell of type Table
+type RenamableField struct {
+	InternalName string `json:"internalName"`
+	DisplayName  string `json:"displayName"`
+	Visible      bool   `json:"visible"`
+}
+
+// TableOptions is a type of options for a DashboardCell with type Table
+type TableOptions struct {
+	VerticalTimeAxis bool           `json:"verticalTimeAxis"`
+	SortBy           RenamableField `json:"sortBy"`
+	Wrapping         string         `json:"wrapping"`
+	FixFirstColumn   bool           `json:"fixFirstColumn"`
+}
+
+// DecimalPlaces indicates whether decimal places should be enforced, and how many digits it should show.
+type DecimalPlaces struct {
+	IsEnforced bool  `json:"isEnforced"`
+	Digits     int32 `json:"digits"`
 }
 
 // DashboardsStore is the storage and retrieval of dashboards
@@ -698,15 +619,16 @@ type DashboardsStore interface {
 
 // Cell is a rectangle and multiple time series queries to visualize.
 type Cell struct {
-	X       int32           `json:"x"`
-	Y       int32           `json:"y"`
-	W       int32           `json:"w"`
-	H       int32           `json:"h"`
-	I       string          `json:"i"`
-	Name    string          `json:"name"`
-	Queries []Query         `json:"queries"`
-	Axes    map[string]Axis `json:"axes"`
-	Type    string          `json:"type"`
+	X          int32           `json:"x"`
+	Y          int32           `json:"y"`
+	W          int32           `json:"w"`
+	H          int32           `json:"h"`
+	I          string          `json:"i"`
+	Name       string          `json:"name"`
+	Queries    []Query         `json:"queries"`
+	Axes       map[string]Axis `json:"axes"`
+	Type       string          `json:"type"`
+	CellColors []CellColor     `json:"colors"`
 }
 
 // Layout is a collection of Cells for visualization
@@ -718,11 +640,11 @@ type Layout struct {
 	Cells       []Cell `json:"cells"`
 }
 
-// LayoutStore stores dashboards and associated Cells
-type LayoutStore interface {
+// LayoutsStore stores dashboards and associated Cells
+type LayoutsStore interface {
 	// All returns all dashboards in the store
 	All(context.Context) ([]Layout, error)
-	// Add creates a new dashboard in the LayoutStore
+	// Add creates a new dashboard in the LayoutsStore
 	Add(context.Context, Layout) (Layout, error)
 	// Delete the dashboard from the store
 	Delete(context.Context, Layout) error
@@ -730,4 +652,131 @@ type LayoutStore interface {
 	Get(ctx context.Context, ID string) (Layout, error)
 	// Update the dashboard in the store.
 	Update(context.Context, Layout) error
+}
+
+// MappingWildcard is the wildcard value for mappings
+const MappingWildcard string = "*"
+
+// A Mapping is the structure that is used to determine a users
+// role within an organization. The high level idea is to grant
+// certain roles to certain users without them having to be given
+// explicit role within the organization.
+//
+// One can think of a mapping like so:
+//     Provider:Scheme:Group -> Organization
+//     github:oauth2:influxdata -> Happy
+//     beyondcorp:ldap:influxdata -> TheBillHilliettas
+//
+// Any of Provider, Scheme, or Group may be provided as a wildcard *
+//     github:oauth2:* -> MyOrg
+//     *:*:* -> AllOrg
+type Mapping struct {
+	ID                   string `json:"id"`
+	Organization         string `json:"organizationId"`
+	Provider             string `json:"provider"`
+	Scheme               string `json:"scheme"`
+	ProviderOrganization string `json:"providerOrganization"`
+}
+
+// MappingsStore is the storage and retrieval of Mappings
+type MappingsStore interface {
+	// Add creates a new Mapping.
+	// The Created mapping is returned back to the user with the
+	// ID field populated.
+	Add(context.Context, *Mapping) (*Mapping, error)
+	// All lists all Mapping in the MappingsStore
+	All(context.Context) ([]Mapping, error)
+	// Delete removes an Mapping from the MappingsStore
+	Delete(context.Context, *Mapping) error
+	// Get retrieves an Mapping from the MappingsStore
+	Get(context.Context, string) (*Mapping, error)
+	// Update updates an Mapping in the MappingsStore
+	Update(context.Context, *Mapping) error
+}
+
+// Organization is a group of resources under a common name
+type Organization struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// DefaultRole is the name of the role that is the default for any users added to the organization
+	DefaultRole string `json:"defaultRole,omitempty"`
+}
+
+// OrganizationQuery represents the attributes that a organization may be retrieved by.
+// It is predominantly used in the OrganizationsStore.Get method.
+// It is expected that only one of ID or Name will be specified, but will prefer ID over Name if both are specified.
+type OrganizationQuery struct {
+	// If an ID is provided in the query, the lookup time for an organization will be O(1).
+	ID *string
+	// If Name is provided, the lookup time will be O(n).
+	Name *string
+}
+
+// OrganizationsStore is the storage and retrieval of Organizations
+//
+// While not necessary for the app to function correctly, it is
+// expected that Implementors of the OrganizationsStore will take
+// care to guarantee that the Organization.Name is unqiue. Allowing
+// for duplicate names creates a confusing UX experience for the User.
+type OrganizationsStore interface {
+	// Add creates a new Organization.
+	// The Created organization is returned back to the user with the
+	// ID field populated.
+	Add(context.Context, *Organization) (*Organization, error)
+	// All lists all Organizations in the OrganizationsStore
+	All(context.Context) ([]Organization, error)
+	// Delete removes an Organization from the OrganizationsStore
+	Delete(context.Context, *Organization) error
+	// Get retrieves an Organization from the OrganizationsStore
+	Get(context.Context, OrganizationQuery) (*Organization, error)
+	// Update updates an Organization in the OrganizationsStore
+	Update(context.Context, *Organization) error
+	// CreateDefault creates the default organization
+	CreateDefault(ctx context.Context) error
+	// DefaultOrganization returns the DefaultOrganization
+	DefaultOrganization(ctx context.Context) (*Organization, error)
+}
+
+// AuthConfig is the global application config section for auth parameters
+type AuthConfig struct {
+	// SuperAdminNewUsers should be true by default to give a seamless upgrade to
+	// 1.4.0 for legacy users. It means that all new users will by default receive
+	// SuperAdmin status. If a SuperAdmin wants to change this behavior, they
+	// can toggle it off via the Chronograf UI, in which case newly authenticating
+	// users will simply receive whatever role they would otherwise receive.
+	SuperAdminNewUsers bool `json:"superAdminNewUsers"`
+}
+
+// Config is the global application Config for parameters that can be set via
+// API, with different sections, such as Auth
+type Config struct {
+	Auth AuthConfig `json:"auth"`
+}
+
+// ConfigStore is the storage and retrieval of global application Config
+type ConfigStore interface {
+	// Initialize creates the initial configuration
+	Initialize(context.Context) error
+	// Get retrieves the whole Config from the ConfigStore
+	Get(context.Context) (*Config, error)
+	// Update updates the whole Config in the ConfigStore
+	Update(context.Context, *Config) error
+}
+
+// BuildInfo is sent to the usage client to track versions and commits
+type BuildInfo struct {
+	Version string
+	Commit  string
+}
+
+// BuildStore is the storage and retrieval of Chronograf build information
+type BuildStore interface {
+	Get(context.Context) (BuildInfo, error)
+	Update(context.Context, BuildInfo) error
+}
+
+// Environment is the set of front-end exposed environment variables
+// that were set on the server
+type Environment struct {
+	TelegrafSystemInterval time.Duration `json:"telegrafSystemInterval"`
 }

@@ -1,4 +1,5 @@
-import React, {PropTypes} from 'react'
+import React from 'react'
+import PropTypes from 'prop-types'
 import DatabaseDropdown from 'shared/components/DatabaseDropdown'
 import MeasurementDropdown from 'src/dashboards/components/MeasurementDropdown'
 import TagKeyDropdown from 'src/dashboards/components/TagKeyDropdown'
@@ -13,6 +14,7 @@ const TemplateQueryBuilder = ({
   onSelectTagKey,
   onStartEdit,
   onErrorThrown,
+  source,
 }) => {
   switch (selectedType) {
     case 'csv':
@@ -24,6 +26,7 @@ const TemplateQueryBuilder = ({
         <div className="tvm-query-builder">
           <span className="tvm-query-builder--text">SHOW MEASUREMENTS ON</span>
           <DatabaseDropdown
+            source={source}
             onSelectDatabase={onSelectDatabase}
             database={selectedDatabase}
             onStartEdit={onStartEdit}
@@ -39,21 +42,25 @@ const TemplateQueryBuilder = ({
             SHOW {selectedType === 'fieldKeys' ? 'FIELD' : 'TAG'} KEYS ON
           </span>
           <DatabaseDropdown
+            source={source}
             onSelectDatabase={onSelectDatabase}
             database={selectedDatabase}
             onStartEdit={onStartEdit}
             onErrorThrown={onErrorThrown}
           />
           <span className="tvm-query-builder--text">FROM</span>
-          {selectedDatabase
-            ? <MeasurementDropdown
-                database={selectedDatabase}
-                measurement={selectedMeasurement}
-                onSelectMeasurement={onSelectMeasurement}
-                onStartEdit={onStartEdit}
-                onErrorThrown={onErrorThrown}
-              />
-            : <div>No database selected</div>}
+          {selectedDatabase ? (
+            <MeasurementDropdown
+              source={source}
+              database={selectedDatabase}
+              measurement={selectedMeasurement}
+              onSelectMeasurement={onSelectMeasurement}
+              onStartEdit={onStartEdit}
+              onErrorThrown={onErrorThrown}
+            />
+          ) : (
+            <div>No database selected</div>
+          )}
         </div>
       )
     case 'tagValues':
@@ -61,32 +68,39 @@ const TemplateQueryBuilder = ({
         <div className="tvm-query-builder">
           <span className="tvm-query-builder--text">SHOW TAG VALUES ON</span>
           <DatabaseDropdown
+            source={source}
             onSelectDatabase={onSelectDatabase}
             database={selectedDatabase}
             onStartEdit={onStartEdit}
             onErrorThrown={onErrorThrown}
           />
           <span className="tvm-query-builder--text">FROM</span>
-          {selectedDatabase
-            ? <MeasurementDropdown
-                database={selectedDatabase}
-                measurement={selectedMeasurement}
-                onSelectMeasurement={onSelectMeasurement}
-                onStartEdit={onStartEdit}
-                onErrorThrown={onErrorThrown}
-              />
-            : 'Pick a DB'}
+          {selectedDatabase ? (
+            <MeasurementDropdown
+              source={source}
+              database={selectedDatabase}
+              measurement={selectedMeasurement}
+              onSelectMeasurement={onSelectMeasurement}
+              onStartEdit={onStartEdit}
+              onErrorThrown={onErrorThrown}
+            />
+          ) : (
+            'Pick a DB'
+          )}
           <span className="tvm-query-builder--text">WITH KEY =</span>
-          {selectedMeasurement
-            ? <TagKeyDropdown
-                database={selectedDatabase}
-                measurement={selectedMeasurement}
-                tagKey={selectedTagKey}
-                onSelectTagKey={onSelectTagKey}
-                onStartEdit={onStartEdit}
-                onErrorThrown={onErrorThrown}
-              />
-            : 'Pick a Tag Key'}
+          {selectedMeasurement ? (
+            <TagKeyDropdown
+              source={source}
+              database={selectedDatabase}
+              measurement={selectedMeasurement}
+              tagKey={selectedTagKey}
+              onSelectTagKey={onSelectTagKey}
+              onStartEdit={onStartEdit}
+              onErrorThrown={onErrorThrown}
+            />
+          ) : (
+            'Pick a Tag Key'
+          )}
         </div>
       )
     default:
@@ -98,7 +112,7 @@ const TemplateQueryBuilder = ({
   }
 }
 
-const {func, string} = PropTypes
+const {func, shape, string} = PropTypes
 
 TemplateQueryBuilder.propTypes = {
   selectedType: string.isRequired,
@@ -110,6 +124,11 @@ TemplateQueryBuilder.propTypes = {
   selectedDatabase: string,
   selectedTagKey: string,
   onErrorThrown: func.isRequired,
+  source: shape({
+    links: shape({
+      proxy: string.isRequired,
+    }).isRequired,
+  }).isRequired,
 }
 
 export default TemplateQueryBuilder

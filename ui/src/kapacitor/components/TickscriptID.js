@@ -1,5 +1,8 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class TickscriptID extends Component {
   constructor(props) {
     super(props)
@@ -10,25 +13,21 @@ class TickscriptID extends Component {
 
     return (
       <input
-        className="page-header--editing kapacitor-theme"
+        className="form-control input-sm form-malachite"
         autoFocus={true}
         value={id}
         onChange={onChangeID}
         placeholder="ID your TICKscript"
         spellCheck={false}
-        autoComplete={false}
+        autoComplete="off"
       />
     )
   }
 }
 
-export const TickscriptStaticID = ({id}) =>
-  <h1
-    className="page-header--editing kapacitor-theme"
-    style={{display: 'flex', justifyContent: 'baseline'}}
-  >
-    {id}
-  </h1>
+export const TickscriptStaticID = ({id}) => (
+  <h1 className="tickscript-controls--name">{id}</h1>
+)
 
 const {func, string} = PropTypes
 

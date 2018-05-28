@@ -37,8 +37,14 @@ func TestValidRuleRequest(t *testing.T) {
 				Query: &chronograf.QueryConfig{
 					Fields: []chronograf.Field{
 						{
-							Field: "oldmanpeabody",
-							Funcs: []string{"max"},
+							Value: "max",
+							Type:  "func",
+							Args: []chronograf.Field{
+								{
+									Value: "oldmanpeabody",
+									Type:  "field",
+								},
+							},
 						},
 					},
 				},
@@ -52,8 +58,14 @@ func TestValidRuleRequest(t *testing.T) {
 				Query: &chronograf.QueryConfig{
 					Fields: []chronograf.Field{
 						{
-							Field: "oldmanpeabody",
-							Funcs: []string{"max"},
+							Value: "max",
+							Type:  "func",
+							Args: []chronograf.Field{
+								{
+									Value: "oldmanpeabody",
+									Type:  "field",
+								},
+							},
 						},
 					},
 				},
@@ -82,9 +94,9 @@ func Test_KapacitorRulesGet(t *testing.T) {
 		expected    []chronograf.AlertRule
 	}{
 		{
-			"basic",
-			"/chronograf/v1/sources/1/kapacitors/1/rules",
-			[]chronograf.AlertRule{
+			name:        "basic",
+			requestPath: "/chronograf/v1/sources/1/kapacitors/1/rules",
+			mockAlerts: []chronograf.AlertRule{
 				{
 					ID:         "cpu_alert",
 					Name:       "cpu_alert",
@@ -94,15 +106,34 @@ func Test_KapacitorRulesGet(t *testing.T) {
 					TICKScript: tickScript,
 				},
 			},
-			[]chronograf.AlertRule{
+			expected: []chronograf.AlertRule{
 				{
 					ID:         "cpu_alert",
 					Name:       "cpu_alert",
 					Status:     "enabled",
 					Type:       "stream",
 					DBRPs:      []chronograf.DBRP{{DB: "telegraf", RP: "autogen"}},
-					Alerts:     []string{},
 					TICKScript: tickScript,
+					AlertNodes: chronograf.AlertNodes{
+						Posts:      []*chronograf.Post{},
+						TCPs:       []*chronograf.TCP{},
+						Email:      []*chronograf.Email{},
+						Exec:       []*chronograf.Exec{},
+						Log:        []*chronograf.Log{},
+						VictorOps:  []*chronograf.VictorOps{},
+						PagerDuty:  []*chronograf.PagerDuty{},
+						PagerDuty2: []*chronograf.PagerDuty{},
+						Pushover:   []*chronograf.Pushover{},
+						Sensu:      []*chronograf.Sensu{},
+						Slack:      []*chronograf.Slack{},
+						Telegram:   []*chronograf.Telegram{},
+						HipChat:    []*chronograf.HipChat{},
+						Alerta:     []*chronograf.Alerta{},
+						OpsGenie:   []*chronograf.OpsGenie{},
+						OpsGenie2:  []*chronograf.OpsGenie{},
+						Talk:       []*chronograf.Talk{},
+						Kafka:      []*chronograf.Kafka{},
+					},
 				},
 			},
 		},
@@ -174,12 +205,22 @@ func Test_KapacitorRulesGet(t *testing.T) {
 			// setup mock service and test logger
 			testLogger := mocks.TestLogger{}
 			svc := &server.Service{
-				ServersStore: &mocks.ServersStore{
-					GetF: func(ctx context.Context, ID int) (chronograf.Server, error) {
-						return chronograf.Server{
-							SrcID: ID,
-							URL:   kapaSrv.URL,
-						}, nil
+				Store: &mocks.Store{
+					SourcesStore: &mocks.SourcesStore{
+						GetF: func(ctx context.Context, ID int) (chronograf.Source, error) {
+							return chronograf.Source{
+								ID:                 ID,
+								InsecureSkipVerify: true,
+							}, nil
+						},
+					},
+					ServersStore: &mocks.ServersStore{
+						GetF: func(ctx context.Context, ID int) (chronograf.Server, error) {
+							return chronograf.Server{
+								SrcID: ID,
+								URL:   kapaSrv.URL,
+							}, nil
+						},
 					},
 				},
 				Logger: &testLogger,
@@ -193,12 +234,12 @@ func Test_KapacitorRulesGet(t *testing.T) {
 			bg := context.Background()
 			params := httprouter.Params{
 				{
-					"id",
-					"1",
+					Key:   "id",
+					Value: "1",
 				},
 				{
-					"kid",
-					"1",
+					Key:   "kid",
+					Value: "1",
 				},
 			}
 			ctx := httprouter.WithParams(bg, params)
@@ -224,8 +265,8 @@ func Test_KapacitorRulesGet(t *testing.T) {
 
 			actual := make([]chronograf.AlertRule, len(frame.Rules))
 
-			for idx, _ := range frame.Rules {
-				actual[idx] = frame.Rules[idx].AlertRule
+			for i := range frame.Rules {
+				actual[i] = frame.Rules[i].AlertRule
 			}
 
 			if resp.StatusCode != http.StatusOK {

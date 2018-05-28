@@ -2,17 +2,23 @@ import {proxy} from 'utils/queryUrlGenerator'
 import AJAX from 'utils/ajax'
 import _ from 'lodash'
 
-export function getCpuAndLoadForHosts(proxyLink, telegrafDB) {
+export const getCpuAndLoadForHosts = (
+  proxyLink,
+  telegrafDB,
+  telegrafSystemInterval,
+  tempVars
+) => {
   return proxy({
     source: proxyLink,
-    query: `SELECT mean("usage_user") FROM cpu WHERE "cpu" = 'cpu-total' AND time > now() - 10m GROUP BY host;
-      SELECT mean("load1") FROM "system" WHERE time > now() - 10m GROUP BY host;
-      SELECT non_negative_derivative(mean(uptime)) AS deltaUptime FROM "system" WHERE time > now() - 10m GROUP BY host, time(1m) fill(0);
-      SELECT mean("Percent_Processor_Time") FROM win_cpu WHERE time > now() - 10m GROUP BY host;
-      SELECT mean("Processor_Queue_Length") FROM win_system WHERE time > now() - 10s GROUP BY host;
-      SELECT non_negative_derivative(mean("System_Up_Time")) AS winDeltaUptime FROM win_system WHERE time > now() - 10m GROUP BY host, time(1m) fill(0);
-      SHOW TAG VALUES FROM /win_system|system/ WITH KEY = "host"`,
+    query: `SELECT mean("usage_user") FROM \":db:\".\":rp:\".\"cpu\" WHERE "cpu" = 'cpu-total' AND time > now() - 10m GROUP BY host;
+      SELECT mean("load1") FROM \":db:\".\":rp:\".\"system\" WHERE time > now() - 10m GROUP BY host;
+      SELECT non_negative_derivative(mean(uptime)) AS deltaUptime FROM \":db:\".\":rp:\".\"system\" WHERE time > now() - ${telegrafSystemInterval} * 10 GROUP BY host, time(${telegrafSystemInterval}) fill(0);
+      SELECT mean("Percent_Processor_Time") FROM \":db:\".\":rp:\".\"win_cpu\" WHERE time > now() - 10m GROUP BY host;
+      SELECT mean("Processor_Queue_Length") FROM \":db:\".\":rp:\".\"win_system\" WHERE time > now() - 10s GROUP BY host;
+      SELECT non_negative_derivative(mean("System_Up_Time")) AS winDeltaUptime FROM \":db:\".\":rp:\".\"win_system\" WHERE time > now() - ${telegrafSystemInterval} * 10 GROUP BY host, time(${telegrafSystemInterval}) fill(0);
+      SHOW TAG VALUES WITH KEY = "host";`,
     db: telegrafDB,
+    tempVars,
   }).then(resp => {
     const hosts = {}
     const precision = 100
@@ -87,7 +93,7 @@ export async function getAllHosts(proxyLink, telegrafDB) {
   try {
     const resp = await proxy({
       source: proxyLink,
-      query: 'show tag values from /win_system|system/ with key = "host"',
+      query: 'show tag values with key = "host"',
       db: telegrafDB,
     })
     const hosts = {}
@@ -110,18 +116,44 @@ export async function getAllHosts(proxyLink, telegrafDB) {
   }
 }
 
-export function getMappings() {
-  return AJAX({
+export const getLayouts = () =>
+  AJAX({
     method: 'GET',
-    resource: 'mappings',
+    resource: 'layouts',
+  })
+
+export const getAppsForHost = (proxyLink, host, appLayouts, telegrafDB) => {
+  const measurements = appLayouts.map(m => `^${m.measurement}$`).join('|')
+  const measurementsToApps = _.zipObject(
+    appLayouts.map(m => m.measurement),
+    appLayouts.map(({app}) => app)
+  )
+
+  return proxy({
+    source: proxyLink,
+    query: `show series from /${measurements}/ where host = '${host}'`,
+    db: telegrafDB,
+  }).then(resp => {
+    const result = {apps: [], tags: {}}
+    const allSeries = _.get(resp, 'data.results.0.series.0.values', [])
+
+    allSeries.forEach(([series]) => {
+      const seriesObj = parseSeries(series)
+      const measurement = seriesObj.measurement
+
+      result.apps = _.uniq(result.apps.concat(measurementsToApps[measurement]))
+      _.assign(result.tags, seriesObj.tags)
+    })
+
+    return result
   })
 }
 
-export function getAppsForHosts(proxyLink, hosts, appMappings, telegrafDB) {
-  const measurements = appMappings.map(m => `^${m.measurement}$`).join('|')
+export const getAppsForHosts = (proxyLink, hosts, appLayouts, telegrafDB) => {
+  const measurements = appLayouts.map(m => `^${m.measurement}$`).join('|')
   const measurementsToApps = _.zipObject(
-    appMappings.map(m => m.measurement),
-    appMappings.map(m => m.name)
+    appLayouts.map(m => m.measurement),
+    appLayouts.map(({app}) => app)
   )
 
   return proxy({
@@ -173,7 +205,7 @@ export function getMeasurementsForHost(source, host) {
       return []
     }
 
-    const series = data.results[0].series[0]
+    const series = _.get(data, ['results', '0', 'series', '0'])
     return series.values.map(measurement => {
       return measurement[0]
     })
@@ -196,17 +228,21 @@ function parseSeries(series) {
   function parseTag(s, obj) {
     const match = tag.exec(s)
 
-    const kv = match[0]
-    const key = match[1]
-    const value = match[2]
+    if (match) {
+      const kv = match[0]
+      const key = match[1]
+      const value = match[2]
 
-    if (key) {
-      if (!obj.tags) {
-        obj.tags = {}
+      if (key) {
+        if (!obj.tags) {
+          obj.tags = {}
+        }
+        obj.tags[key] = value
       }
-      obj.tags[key] = value
+      return s.slice(match.index + kv.length)
     }
-    return s.slice(match.index + kv.length)
+
+    return ''
   }
 
   let workStr = series.slice()

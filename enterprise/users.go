@@ -2,6 +2,7 @@ package enterprise
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/influxdata/chronograf"
 )
@@ -28,7 +29,7 @@ func (c *UserStore) Add(ctx context.Context, u *chronograf.User) (*chronograf.Us
 		}
 	}
 
-	return c.Get(ctx, u.Name)
+	return c.Get(ctx, chronograf.UserQuery{Name: &u.Name})
 }
 
 // Delete the User from Influx Enterprise
@@ -36,9 +37,22 @@ func (c *UserStore) Delete(ctx context.Context, u *chronograf.User) error {
 	return c.Ctrl.DeleteUser(ctx, u.Name)
 }
 
+// Num of users in Influx
+func (c *UserStore) Num(ctx context.Context) (int, error) {
+	all, err := c.All(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(all), nil
+}
+
 // Get retrieves a user if name exists.
-func (c *UserStore) Get(ctx context.Context, name string) (*chronograf.User, error) {
-	u, err := c.Ctrl.User(ctx, name)
+func (c *UserStore) Get(ctx context.Context, q chronograf.UserQuery) (*chronograf.User, error) {
+	if q.Name == nil {
+		return nil, fmt.Errorf("query must specify name")
+	}
+	u, err := c.Ctrl.User(ctx, *q.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +62,7 @@ func (c *UserStore) Get(ctx context.Context, name string) (*chronograf.User, err
 		return nil, err
 	}
 
-	role := ur[name]
+	role := ur[*q.Name]
 	cr := role.ToChronograf()
 	// For now we are removing all users from a role being returned.
 	for i, r := range cr {
@@ -70,44 +84,49 @@ func (c *UserStore) Update(ctx context.Context, u *chronograf.User) error {
 		return c.Ctrl.ChangePassword(ctx, u.Name, u.Passwd)
 	}
 
-	// Make a list of the roles we want this user to have:
-	want := make([]string, len(u.Roles))
-	for i, r := range u.Roles {
-		want[i] = r.Name
-	}
+	if u.Roles != nil {
+		// Make a list of the roles we want this user to have:
+		want := make([]string, len(u.Roles))
+		for i, r := range u.Roles {
+			want[i] = r.Name
+		}
 
-	// Find the list of all roles this user is currently in
-	userRoles, err := c.UserRoles(ctx)
-	if err != nil {
-		return nil
-	}
-	// Make a list of the roles the user currently has
-	roles := userRoles[u.Name]
-	have := make([]string, len(roles.Roles))
-	for i, r := range roles.Roles {
-		have[i] = r.Name
-	}
+		// Find the list of all roles this user is currently in
+		userRoles, err := c.UserRoles(ctx)
+		if err != nil {
+			return nil
+		}
+		// Make a list of the roles the user currently has
+		roles := userRoles[u.Name]
+		have := make([]string, len(roles.Roles))
+		for i, r := range roles.Roles {
+			have[i] = r.Name
+		}
 
-	// Calculate the roles the user will be removed from and the roles the user
-	// will be added to.
-	revoke, add := Difference(want, have)
+		// Calculate the roles the user will be removed from and the roles the user
+		// will be added to.
+		revoke, add := Difference(want, have)
 
-	// First, add the user to the new roles
-	for _, role := range add {
-		if err := c.Ctrl.AddRoleUsers(ctx, role, []string{u.Name}); err != nil {
-			return err
+		// First, add the user to the new roles
+		for _, role := range add {
+			if err := c.Ctrl.AddRoleUsers(ctx, role, []string{u.Name}); err != nil {
+				return err
+			}
+		}
+
+		// ... and now remove the user from an extra roles
+		for _, role := range revoke {
+			if err := c.Ctrl.RemoveRoleUsers(ctx, role, []string{u.Name}); err != nil {
+				return err
+			}
 		}
 	}
 
-	// ... and now remove the user from an extra roles
-	for _, role := range revoke {
-		if err := c.Ctrl.RemoveRoleUsers(ctx, role, []string{u.Name}); err != nil {
-			return err
-		}
+	if u.Permissions != nil {
+		perms := ToEnterprise(u.Permissions)
+		return c.Ctrl.SetUserPerms(ctx, u.Name, perms)
 	}
-
-	perms := ToEnterprise(u.Permissions)
-	return c.Ctrl.SetUserPerms(ctx, u.Name, perms)
+	return nil
 }
 
 // All is all users in influx

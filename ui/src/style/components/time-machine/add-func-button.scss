@@ -1,0 +1,97 @@
+/*
+    IFQL Add Function Button
+    ----------------------------------------------------------------------------
+*/
+
+$ifql-func-selector--gap: 10px;
+$ifql-func-selector--height: 30px;
+
+.ifql-func--selector {
+  display: flex;
+  align-items: center;
+  position: relative;
+
+  &.open {
+    z-index: 9999;
+  }
+}
+
+.func-selector--connector {
+  width: $ifql-func-selector--gap;
+  height: $ifql-func-selector--height;
+  position: relative;
+
+  &:after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    height: 4px;
+    transform: translateY(-50%);
+    @include gradient-h($g4-onyx, $c-pool);
+  }
+}
+
+.btn.btn-sm.ifql-func--button {
+  border-radius: 50%;
+  float: left;
+  &:focus {
+    box-shadow: 0 0 8px 3px $c-amethyst;
+  }
+}
+
+.ifql-func--autocomplete,
+.ifql-func--list {
+  position: absolute;
+  width: 166px;
+}
+
+.ifql-func--autocomplete {
+  left: 0;
+  top: 0;
+
+  .func-selector--connector + & {
+    left: $ifql-func-selector--gap;
+  }
+}
+
+.ifql-func--list {
+  left: 0;
+  border-radius: $radius;
+  top: $ifql-func-selector--height;
+  padding: 0;
+  margin: 0;
+  @extend %no-user-select;
+  @include gradient-h($c-star, $c-pool);
+}
+
+.ifql-func--item {
+  height: 28px;
+  line-height: 28px;
+  padding: 0 11px;
+  margin: 0;
+  font-size: 13px;
+  color: $c-neutrino;
+
+  &:first-child {
+    border-radius: 4px 4px 0 0;
+  }
+
+  &:last-child {
+    border-radius: 0 0 4px 4px;
+  }
+
+  &.active {
+    @include gradient-h($c-comet, $c-laser);
+    color: $g20-white;
+  }
+
+  &:hover {
+    cursor: pointer;
+  }
+
+  &.empty {
+    font-style: italic;
+    color: $c-hydrogen;
+  }
+}

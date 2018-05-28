@@ -1,10 +1,13 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 
 import Dropdown from 'shared/components/Dropdown'
 import {showMeasurements} from 'shared/apis/metaQuery'
 import parsers from 'shared/parsing'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 const {measurements: showMeasurementsParser} = parsers
 
+@ErrorHandling
 class MeasurementDropdown extends Component {
   constructor(props) {
     super(props)
@@ -39,12 +42,14 @@ class MeasurementDropdown extends Component {
   }
 
   _getMeasurements = async () => {
-    const {source: {links: {proxy}}} = this.context
     const {
       measurement,
       database,
       onSelectMeasurement,
       onErrorThrown,
+      source: {
+        links: {proxy},
+      },
     } = this.props
 
     try {
@@ -65,20 +70,17 @@ class MeasurementDropdown extends Component {
 
 const {func, shape, string} = PropTypes
 
-MeasurementDropdown.contextTypes = {
-  source: shape({
-    links: shape({
-      proxy: string.isRequired,
-    }).isRequired,
-  }).isRequired,
-}
-
 MeasurementDropdown.propTypes = {
   database: string.isRequired,
   measurement: string,
   onSelectMeasurement: func.isRequired,
   onStartEdit: func.isRequired,
   onErrorThrown: func.isRequired,
+  source: shape({
+    links: shape({
+      proxy: string.isRequired,
+    }).isRequired,
+  }).isRequired,
 }
 
 export default MeasurementDropdown

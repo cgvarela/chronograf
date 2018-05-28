@@ -1,7 +1,10 @@
 package kapacitor
 
-import "github.com/influxdata/chronograf"
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/influxdata/chronograf"
+)
 
 const (
 	// Deadman triggers when data is missing for a period of time
@@ -20,7 +23,6 @@ const (
 
 // AllAlerts are properties all alert types will have
 var AllAlerts = `
-    .stateChangesOnly()
     .message(message)
 	.id(idVar)
 	.idTag(idTag)
@@ -110,7 +112,15 @@ func Trigger(rule chronograf.AlertRule) (string, error) {
 		return "", err
 	}
 
+	// Only add stateChangesOnly to new rules
+	if rule.ID == "" {
+		trigger += `
+				.stateChangesOnly()
+		`
+	}
+
 	trigger += AllAlerts
+
 	if rule.Details != "" {
 		trigger += Details
 	}

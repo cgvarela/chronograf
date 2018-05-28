@@ -1,8 +1,8 @@
-import React, {Component, PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import ReactGridLayout, {WidthProvider} from 'react-grid-layout'
-import Resizeable from 'react-component-resizable'
 
-import _ from 'lodash'
+import Authorized, {EDITOR_ROLE} from 'src/auth/Authorized'
 
 import Layout from 'src/shared/components/Layout'
 
@@ -14,16 +14,17 @@ import {
   LAYOUT_MARGIN,
   DASHBOARD_LAYOUT_ROW_HEIGHT,
 } from 'shared/constants'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
 const GridLayout = WidthProvider(ReactGridLayout)
 
+@ErrorHandling
 class LayoutRenderer extends Component {
   constructor(props) {
     super(props)
 
     this.state = {
       rowHeight: this.calculateRowHeight(),
-      resizeCoords: null,
     }
   }
 
@@ -31,13 +32,19 @@ class LayoutRenderer extends Component {
     if (!this.props.onPositionChange) {
       return
     }
-
     const newCells = this.props.cells.map(cell => {
       const l = layout.find(ly => ly.i === cell.i)
-      const newLayout = {x: l.x, y: l.y, h: l.h, w: l.w}
-      return {...cell, ...newLayout}
+      const newLayout = {
+        x: l.x,
+        y: l.y,
+        h: l.h,
+        w: l.w,
+      }
+      return {
+        ...cell,
+        ...newLayout,
+      }
     })
-
     this.props.onPositionChange(newCells)
   }
 
@@ -51,16 +58,8 @@ class LayoutRenderer extends Component {
           PAGE_HEADER_HEIGHT -
           PAGE_CONTAINER_MARGIN -
           PAGE_CONTAINER_MARGIN) /
-        STATUS_PAGE_ROW_COUNT
+          STATUS_PAGE_ROW_COUNT
       : DASHBOARD_LAYOUT_ROW_HEIGHT
-  }
-
-  handleCellResize = (__, oldCoords, resizeCoords) => {
-    if (_.isEqual(oldCoords, resizeCoords)) {
-      return
-    }
-
-    this.setState({resizeCoords})
   }
 
   render() {
@@ -75,17 +74,25 @@ class LayoutRenderer extends Component {
       isEditable,
       onEditCell,
       autoRefresh,
+      manualRefresh,
       onDeleteCell,
-      synchronizer,
+      onCloneCell,
       onCancelEditCell,
       onSummonOverlayTechnologies,
     } = this.props
 
-    const {rowHeight, resizeCoords} = this.state
+    const {rowHeight} = this.state
     const isDashboard = !!this.props.onPositionChange
 
     return (
-      <Resizeable onResize={this.handleCellResize}>
+      <Authorized
+        requiredRole={EDITOR_ROLE}
+        propsOverride={{
+          isDraggable: false,
+          isResizable: false,
+          draggableHandle: null,
+        }}
+      >
         <GridLayout
           layout={cells}
           cols={12}
@@ -95,34 +102,42 @@ class LayoutRenderer extends Component {
           useCSSTransforms={false}
           onResize={this.handleCellResize}
           onLayoutChange={this.handleLayoutChange}
-          draggableHandle={'.dash-graph--name'}
+          draggableHandle={'.dash-graph--draggable'}
           isDraggable={isDashboard}
           isResizable={isDashboard}
         >
-          {cells.map(cell =>
+          {cells.map(cell => (
             <div key={cell.i}>
-              <Layout
-                key={cell.i}
-                cell={cell}
-                host={host}
-                source={source}
-                onZoom={onZoom}
-                sources={sources}
-                templates={templates}
-                timeRange={timeRange}
-                isEditable={isEditable}
-                onEditCell={onEditCell}
-                resizeCoords={resizeCoords}
-                autoRefresh={autoRefresh}
-                onDeleteCell={onDeleteCell}
-                synchronizer={synchronizer}
-                onCancelEditCell={onCancelEditCell}
-                onSummonOverlayTechnologies={onSummonOverlayTechnologies}
-              />
+              <Authorized
+                requiredRole={EDITOR_ROLE}
+                propsOverride={{
+                  isEditable: false,
+                }}
+              >
+                <Layout
+                  key={cell.i}
+                  cell={cell}
+                  host={host}
+                  source={source}
+                  onZoom={onZoom}
+                  sources={sources}
+                  templates={templates}
+                  timeRange={timeRange}
+                  isEditable={isEditable}
+                  onEditCell={onEditCell}
+                  autoRefresh={autoRefresh}
+                  onDeleteCell={onDeleteCell}
+                  onCloneCell={onCloneCell}
+                  manualRefresh={manualRefresh}
+                  onCancelEditCell={onCancelEditCell}
+                  onStopAddAnnotation={this.handleStopAddAnnotation}
+                  onSummonOverlayTechnologies={onSummonOverlayTechnologies}
+                />
+              </Authorized>
             </div>
-          )}
+          ))}
         </GridLayout>
-      </Resizeable>
+      </Authorized>
     )
   }
 }
@@ -131,6 +146,7 @@ const {arrayOf, bool, func, number, shape, string} = PropTypes
 
 LayoutRenderer.propTypes = {
   autoRefresh: number.isRequired,
+  manualRefresh: number,
   timeRange: shape({
     lower: string.isRequired,
   }),
@@ -152,6 +168,24 @@ LayoutRenderer.propTypes = {
       i: string.isRequired,
       name: string.isRequired,
       type: string.isRequired,
+      timeFormat: string,
+      tableOptions: shape({
+        verticalTimeAxis: bool.isRequired,
+        sortBy: shape({
+          internalName: string.isRequired,
+          displayName: string.isRequired,
+          visible: bool.isRequired,
+        }).isRequired,
+        wrapping: string.isRequired,
+        fixFirstColumn: bool.isRequired,
+      }),
+      fieldOptions: arrayOf(
+        shape({
+          internalName: string.isRequired,
+          displayName: string.isRequired,
+          visible: bool.isRequired,
+        }).isRequired
+      ),
     }).isRequired
   ),
   templates: arrayOf(shape()),
@@ -164,8 +198,8 @@ LayoutRenderer.propTypes = {
   onPositionChange: func,
   onEditCell: func,
   onDeleteCell: func,
+  onCloneCell: func,
   onSummonOverlayTechnologies: func,
-  synchronizer: func,
   isStatusPage: bool,
   isEditable: bool,
   onCancelEditCell: func,

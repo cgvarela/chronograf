@@ -5,6 +5,17 @@ import (
 	"net/url"
 )
 
+type getIFQLLinksResponse struct {
+	AST         string `json:"ast"`
+	Self        string `json:"self"`
+	Suggestions string `json:"suggestions"`
+}
+
+type getConfigLinksResponse struct {
+	Self string `json:"self"` // Location of the whole global application configuration
+	Auth string `json:"auth"` // Location of the auth section of the global application configuration
+}
+
 type getExternalLinksResponse struct {
 	StatusFeed  *string      `json:"statusFeed,omitempty"` // Location of the a JSON Feed for client's Status page News Feed
 	CustomLinks []CustomLink `json:"custom,omitempty"`     // Any custom external links for client's User menu

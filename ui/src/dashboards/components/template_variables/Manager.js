@@ -1,6 +1,7 @@
-import React, {Component, PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import classnames from 'classnames'
-import uuid from 'node-uuid'
+import uuid from 'uuid'
 
 import TemplateVariableTable from 'src/dashboards/components/template_variables/Table'
 
@@ -18,7 +19,7 @@ const TemplateVariableManager = ({
   tempVarAlreadyExists,
   onSaveTemplatesSuccess,
   onEditTemplateVariables,
-}) =>
+}) => (
   <div className="template-variable-manager">
     <div className="template-variable-manager--header">
       <div className="page-header__left">
@@ -41,7 +42,7 @@ const TemplateVariableManager = ({
         >
           Save Changes
         </button>
-        <span className="page-header__dismiss" onClick={onClose(isEdited)} />
+        <span className="page-header__dismiss" onClick={onClose} />
       </div>
     </div>
     <div className="template-variable-manager--body">
@@ -55,6 +56,7 @@ const TemplateVariableManager = ({
       />
     </div>
   </div>
+)
 
 class TemplateVariableManagerWrapper extends Component {
   constructor(props) {
@@ -64,15 +66,9 @@ class TemplateVariableManagerWrapper extends Component {
       rows: this.props.templates,
       isEdited: false,
     }
-
-    this.onRunQuerySuccess = ::this.onRunQuerySuccess
-    this.onSaveTemplatesSuccess = ::this.onSaveTemplatesSuccess
-    this.onAddVariable = ::this.onAddVariable
-    this.onDeleteTemplateVariable = ::this.onDeleteTemplateVariable
-    this.tempVarAlreadyExists = ::this.tempVarAlreadyExists
   }
 
-  onAddVariable() {
+  onAddVariable = () => {
     const {rows} = this.state
 
     const newRow = {
@@ -95,7 +91,7 @@ class TemplateVariableManagerWrapper extends Component {
     this.setState({rows: newRows})
   }
 
-  onRunQuerySuccess(template, queryConfig, parsedData, tempVar) {
+  onRunQuerySuccess = (template, queryConfig, parsedData, tempVar) => {
     const {rows} = this.state
     const {id, links} = template
     const {
@@ -156,7 +152,7 @@ class TemplateVariableManagerWrapper extends Component {
     this.setState({rows: newRows, isEdited: true})
   }
 
-  onSaveTemplatesSuccess() {
+  onSaveTemplatesSuccess = () => {
     const {rows} = this.state
 
     const newRows = rows.map(row => ({...row, isNew: false}))
@@ -164,7 +160,7 @@ class TemplateVariableManagerWrapper extends Component {
     this.setState({rows: newRows, isEdited: false})
   }
 
-  onDeleteTemplateVariable(templateID) {
+  onDeleteTemplateVariable = templateID => {
     const {rows} = this.state
 
     const newRows = rows.filter(({id}) => id !== templateID)
@@ -172,11 +168,23 @@ class TemplateVariableManagerWrapper extends Component {
     this.setState({rows: newRows, isEdited: true})
   }
 
-  tempVarAlreadyExists(testTempVar, testID) {
+  tempVarAlreadyExists = (testTempVar, testID) => {
     const {rows: tempVars} = this.state
     return tempVars.some(
       ({tempVar, id}) => tempVar === testTempVar && id !== testID
     )
+  }
+
+  handleDismissManager = () => {
+    const {onDismissOverlay} = this.props
+    const {isEdited} = this.state
+
+    if (
+      !isEdited ||
+      (isEdited && confirm('Do you want to close without saving?')) // eslint-disable-line no-alert
+    ) {
+      onDismissOverlay()
+    }
   }
 
   render() {
@@ -184,11 +192,12 @@ class TemplateVariableManagerWrapper extends Component {
     return (
       <TemplateVariableManager
         {...this.props}
+        templates={rows}
+        isEdited={isEdited}
+        onClose={this.handleDismissManager}
         onRunQuerySuccess={this.onRunQuerySuccess}
         onSaveTemplatesSuccess={this.onSaveTemplatesSuccess}
         onAddVariable={this.onAddVariable}
-        templates={rows}
-        isEdited={isEdited}
         onDelete={this.onDeleteTemplateVariable}
         tempVarAlreadyExists={this.tempVarAlreadyExists}
       />
@@ -208,13 +217,7 @@ TemplateVariableManager.propTypes = {
 }
 
 TemplateVariableManagerWrapper.propTypes = {
-  onClose: func.isRequired,
   onEditTemplateVariables: func.isRequired,
-  source: shape({
-    links: shape({
-      proxy: string,
-    }),
-  }).isRequired,
   templates: arrayOf(
     shape({
       type: string.isRequired,
@@ -233,6 +236,7 @@ TemplateVariableManagerWrapper.propTypes = {
     })
   ),
   onRunQueryFailure: func.isRequired,
+  onDismissOverlay: func,
 }
 
 export default TemplateVariableManagerWrapper

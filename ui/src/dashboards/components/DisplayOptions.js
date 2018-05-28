@@ -1,10 +1,17 @@
-import React, {Component, PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
+import {connect} from 'react-redux'
 
 import GraphTypeSelector from 'src/dashboards/components/GraphTypeSelector'
+import GaugeOptions from 'src/dashboards/components/GaugeOptions'
+import SingleStatOptions from 'src/dashboards/components/SingleStatOptions'
 import AxesOptions from 'src/dashboards/components/AxesOptions'
+import TableOptions from 'src/dashboards/components/TableOptions'
 
 import {buildDefaultYLabel} from 'shared/presenters'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class DisplayOptions extends Component {
   constructor(props) {
     super(props)
@@ -31,51 +38,73 @@ class DisplayOptions extends Component {
       : axes
   }
 
-  render() {
+  renderOptions = () => {
     const {
-      onSetBase,
-      onSetScale,
-      onSetLabel,
-      selectedGraphType,
-      onSelectGraphType,
-      onSetPrefixSuffix,
-      onSetYAxisBoundMin,
-      onSetYAxisBoundMax,
+      cell: {type},
+      staticLegend,
+      onToggleStaticLegend,
+      onResetFocus,
+      queryConfigs,
     } = this.props
-    const {axes} = this.state
+    switch (type) {
+      case 'gauge':
+        return <GaugeOptions onResetFocus={onResetFocus} />
+      case 'single-stat':
+        return <SingleStatOptions onResetFocus={onResetFocus} />
+      case 'table':
+        return (
+          <TableOptions
+            onResetFocus={onResetFocus}
+            queryConfigs={queryConfigs}
+          />
+        )
+      default:
+        return (
+          <AxesOptions
+            onToggleStaticLegend={onToggleStaticLegend}
+            staticLegend={staticLegend}
+          />
+        )
+    }
+  }
 
+  render() {
     return (
       <div className="display-options">
-        <AxesOptions
-          axes={axes}
-          onSetBase={onSetBase}
-          onSetLabel={onSetLabel}
-          onSetScale={onSetScale}
-          onSetPrefixSuffix={onSetPrefixSuffix}
-          onSetYAxisBoundMin={onSetYAxisBoundMin}
-          onSetYAxisBoundMax={onSetYAxisBoundMax}
-        />
-        <GraphTypeSelector
-          selectedGraphType={selectedGraphType}
-          onSelectGraphType={onSelectGraphType}
-        />
+        <GraphTypeSelector />
+        {this.renderOptions()}
       </div>
     )
   }
 }
-const {arrayOf, func, shape, string} = PropTypes
+
+const {arrayOf, bool, func, shape, string} = PropTypes
 
 DisplayOptions.propTypes = {
-  selectedGraphType: string.isRequired,
-  onSelectGraphType: func.isRequired,
-  onSetPrefixSuffix: func.isRequired,
-  onSetYAxisBoundMin: func.isRequired,
-  onSetYAxisBoundMax: func.isRequired,
-  onSetScale: func.isRequired,
-  onSetLabel: func.isRequired,
-  onSetBase: func.isRequired,
-  axes: shape({}).isRequired,
+  cell: shape({
+    type: string.isRequired,
+  }).isRequired,
+  axes: shape({
+    y: shape({
+      bounds: arrayOf(string),
+      label: string,
+      defaultYLabel: string,
+    }),
+  }).isRequired,
   queryConfigs: arrayOf(shape()).isRequired,
+  onToggleStaticLegend: func.isRequired,
+  staticLegend: bool,
+  onResetFocus: func.isRequired,
 }
 
-export default DisplayOptions
+const mapStateToProps = ({
+  cellEditorOverlay: {
+    cell,
+    cell: {axes},
+  },
+}) => ({
+  cell,
+  axes,
+})
+
+export default connect(mapStateToProps, null)(DisplayOptions)

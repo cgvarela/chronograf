@@ -1,11 +1,15 @@
-import React, {PropTypes, Component} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import _ from 'lodash'
 
 import SearchBar from 'src/hosts/components/SearchBar'
 import HostRow from 'src/hosts/components/HostRow'
+import InfiniteScroll from 'shared/components/InfiniteScroll'
 
 import {HOSTS_TABLE} from 'src/hosts/constants/tableSizing'
+import {ErrorHandling} from 'src/shared/decorators/errors'
 
+@ErrorHandling
 class HostsTable extends Component {
   constructor(props) {
     super(props)
@@ -67,11 +71,11 @@ class HostsTable extends Component {
   sortableClasses = key => {
     if (this.state.sortKey === key) {
       if (this.state.sortDirection === 'asc') {
-        return 'sortable-header sorting-ascending'
+        return 'hosts-table--th sortable-header sorting-ascending'
       }
-      return 'sortable-header sorting-descending'
+      return 'hosts-table--th sortable-header sorting-descending'
     }
-    return 'sortable-header'
+    return 'hosts-table--th sortable-header'
   }
 
   render() {
@@ -98,59 +102,63 @@ class HostsTable extends Component {
     }
 
     return (
-      <div className="panel panel-minimal">
-        <div className="panel-heading u-flex u-ai-center u-jc-space-between">
-          <h2 className="panel-title">
-            {hostsTitle}
-          </h2>
-          <SearchBar onSearch={this.updateSearchTerm} />
+      <div className="panel">
+        <div className="panel-heading">
+          <h2 className="panel-title">{hostsTitle}</h2>
+          <SearchBar
+            placeholder="Filter by Host..."
+            onSearch={this.updateSearchTerm}
+          />
         </div>
         <div className="panel-body">
-          {hostCount > 0 && !hostsError.length
-            ? <table className="table v-center table-highlight">
-                <thead>
-                  <tr>
-                    <th
-                      onClick={this.updateSort('name')}
-                      className={this.sortableClasses('name')}
-                      style={{width: colName}}
-                    >
-                      Host
-                    </th>
-                    <th
-                      onClick={this.updateSort('deltaUptime')}
-                      className={this.sortableClasses('deltaUptime')}
-                      style={{width: colStatus}}
-                    >
-                      Status
-                    </th>
-                    <th
-                      onClick={this.updateSort('cpu')}
-                      className={this.sortableClasses('cpu')}
-                      style={{width: colCPU}}
-                    >
-                      CPU
-                    </th>
-                    <th
-                      onClick={this.updateSort('load')}
-                      className={this.sortableClasses('load')}
-                      style={{width: colLoad}}
-                    >
-                      Load
-                    </th>
-                    <th>Apps</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {sortedHosts.map(h =>
-                    <HostRow key={h.name} host={h} source={source} />
-                  )}
-                </tbody>
-              </table>
-            : <div className="generic-empty-state">
-                <h4 style={{margin: '90px 0'}}>No Hosts found</h4>
-              </div>}
+          {hostCount > 0 && !hostsError.length ? (
+            <div className="hosts-table">
+              <div className="hosts-table--thead">
+                <div className="hosts-table--tr">
+                  <div
+                    onClick={this.updateSort('name')}
+                    className={this.sortableClasses('name')}
+                    style={{width: colName}}
+                  >
+                    Host
+                  </div>
+                  <div
+                    onClick={this.updateSort('deltaUptime')}
+                    className={this.sortableClasses('deltaUptime')}
+                    style={{width: colStatus}}
+                  >
+                    Status
+                  </div>
+                  <div
+                    onClick={this.updateSort('cpu')}
+                    className={this.sortableClasses('cpu')}
+                    style={{width: colCPU}}
+                  >
+                    CPU
+                  </div>
+                  <div
+                    onClick={this.updateSort('load')}
+                    className={this.sortableClasses('load')}
+                    style={{width: colLoad}}
+                  >
+                    Load
+                  </div>
+                  <div className="hosts-table--th">Apps</div>
+                </div>
+              </div>
+              <InfiniteScroll
+                items={sortedHosts.map(h => (
+                  <HostRow key={h.name} host={h} source={source} />
+                ))}
+                itemHeight={26}
+                className="hosts-table--tbody"
+              />
+            </div>
+          ) : (
+            <div className="generic-empty-state">
+              <h4 style={{margin: '90px 0'}}>No Hosts found</h4>
+            </div>
+          )}
         </div>
       </div>
     )

@@ -2,6 +2,7 @@ package oauth2
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/influxdata/chronograf"
@@ -61,7 +62,19 @@ func (h *Heroku) PrincipalID(provider *http.Client) (string, error) {
 		DefaultOrganization DefaultOrg `json:"default_organization"`
 	}
 
-	resp, err := provider.Get(HerokuAccountRoute)
+	req, err := http.NewRequest("GET", HerokuAccountRoute, nil)
+	// Requests fail to Heroku unless this Accept header is set.
+	req.Header.Set("Accept", "application/vnd.heroku+json; version=3")
+	resp, err := provider.Do(req)
+	if resp.StatusCode/100 != 2 {
+		err := fmt.Errorf(
+			"Unable to GET user data from %s. Status: %s",
+			HerokuAccountRoute,
+			resp.Status,
+		)
+		h.Logger.Error("", err)
+		return "", err
+	}
 	if err != nil {
 		h.Logger.Error("Unable to communicate with Heroku. err:", err)
 		return "", err
@@ -86,6 +99,34 @@ func (h *Heroku) PrincipalID(provider *http.Client) (string, error) {
 		return "", ErrOrgMembership
 	}
 	return account.Email, nil
+}
+
+// Group returns the Heroku organization that user belongs to.
+func (h *Heroku) Group(provider *http.Client) (string, error) {
+	type DefaultOrg struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	type Account struct {
+		Email               string     `json:"email"`
+		DefaultOrganization DefaultOrg `json:"default_organization"`
+	}
+
+	resp, err := provider.Get(HerokuAccountRoute)
+	if err != nil {
+		h.Logger.Error("Unable to communicate with Heroku. err:", err)
+		return "", err
+	}
+	defer resp.Body.Close()
+	d := json.NewDecoder(resp.Body)
+
+	var account Account
+	if err := d.Decode(&account); err != nil {
+		h.Logger.Error("Unable to decode response from Heroku. err:", err)
+		return "", err
+	}
+
+	return account.DefaultOrganization.Name, nil
 }
 
 // Scopes for heroku is "identity" which grants access to user account

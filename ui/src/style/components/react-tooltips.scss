@@ -26,6 +26,7 @@ $tooltip-code-color: $c-potassium;
   word-break: keep-all;
   border-radius: $tooltip-radius;
   text-transform: none;
+  text-align: left;
   cursor: default;
 
   &.type-dark {
@@ -42,10 +43,14 @@ $tooltip-code-color: $c-potassium;
   h1 {
     font-size: 14px;
     font-weight: 600;
-    margin: 0 0 8px 0;
+    margin: 8px 0;
     line-height: 1.125em;
     letter-spacing: 0;
     font-family: $default-font;
+
+    &:first-of-type {
+      margin-top: 0;
+    }
   }
 
   p {
@@ -122,4 +127,8 @@ $qmark-tooltip-size: 15px;
   .question-mark-tooltip--icon {
     background-color: $c-pool;
   }
+}
+
+a > .question-mark-tooltip:hover {
+  cursor: pointer;
 }

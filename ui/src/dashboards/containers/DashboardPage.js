@@ -1,37 +1,71 @@
-import React, {PropTypes, Component} from 'react'
-import {Link} from 'react-router'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import {connect} from 'react-redux'
+import {withRouter} from 'react-router'
 import {bindActionCreators} from 'redux'
 
-import Dygraph from 'src/external/dygraph'
+import _ from 'lodash'
 
-import OverlayTechnologies from 'shared/components/OverlayTechnologies'
+import {isUserAuthorized, EDITOR_ROLE} from 'src/auth/Authorized'
+
 import CellEditorOverlay from 'src/dashboards/components/CellEditorOverlay'
 import DashboardHeader from 'src/dashboards/components/DashboardHeader'
-import DashboardHeaderEdit from 'src/dashboards/components/DashboardHeaderEdit'
 import Dashboard from 'src/dashboards/components/Dashboard'
 import TemplateVariableManager from 'src/dashboards/components/template_variables/Manager'
+import ManualRefresh from 'src/shared/components/ManualRefresh'
+import TemplateControlBar from 'src/dashboards/components/TemplateControlBar'
 
 import {errorThrown as errorThrownAction} from 'shared/actions/errors'
+import {notify as notifyAction} from 'shared/actions/notifications'
+import idNormalizer, {TYPE_ID} from 'src/normalizers/id'
+import {millisecondTimeRange} from 'src/dashboards/utils/time'
 
 import * as dashboardActionCreators from 'src/dashboards/actions'
+import * as annotationActions from 'shared/actions/annotations'
+
+import {
+  showCellEditorOverlay,
+  hideCellEditorOverlay,
+} from 'src/dashboards/actions/cellEditorOverlay'
+import {showOverlay} from 'src/shared/actions/overlayTechnology'
+
+import {dismissEditingAnnotation} from 'src/shared/actions/annotations'
 
 import {
   setAutoRefresh,
   templateControlBarVisibilityToggled as templateControlBarVisibilityToggledAction,
 } from 'shared/actions/app'
 import {presentationButtonDispatcher} from 'shared/dispatchers'
+import {
+  interval,
+  DASHBOARD_LAYOUT_ROW_HEIGHT,
+  TEMP_VAR_DASHBOARD_TIME,
+  TEMP_VAR_UPPER_DASHBOARD_TIME,
+} from 'shared/constants'
+import {notifyDashboardNotFound} from 'shared/copy/notifications'
+import {colorsStringSchema, colorsNumberSchema} from 'shared/schemas'
+import {ErrorHandling} from 'src/shared/decorators/errors'
+import {OverlayContext} from 'src/shared/components/OverlayTechnology'
 
+const FORMAT_INFLUXQL = 'influxql'
+const defaultTimeRange = {
+  upper: null,
+  lower: 'now() - 15m',
+  seconds: 900,
+  format: FORMAT_INFLUXQL,
+}
+
+@ErrorHandling
 class DashboardPage extends Component {
   constructor(props) {
     super(props)
 
     this.state = {
-      dygraphs: [],
       isEditMode: false,
       selectedCell: null,
-      isTemplating: false,
       zoomedTimeRange: {zoomedLower: null, zoomedUpper: null},
+      scrollTop: 0,
+      windowHeight: window.innerHeight,
     }
   }
 
@@ -44,55 +78,154 @@ class DashboardPage extends Component {
         putDashboardByID,
       },
       source,
+      meRole,
+      isUsingAuth,
+      router,
+      notify,
+      getAnnotationsAsync,
+      timeRange,
+      autoRefresh,
     } = this.props
 
+    const annotationRange = millisecondTimeRange(timeRange)
+    getAnnotationsAsync(source.links.annotations, annotationRange)
+
+    if (autoRefresh) {
+      this.intervalID = setInterval(() => {
+        getAnnotationsAsync(source.links.annotations, annotationRange)
+      }, autoRefresh)
+    }
+
+    window.addEventListener('resize', this.handleWindowResize, true)
     const dashboards = await getDashboardsAsync()
-    const dashboard = dashboards.find(d => d.id === +dashboardID)
+    const dashboard = dashboards.find(
+      d => d.id === idNormalizer(TYPE_ID, dashboardID)
+    )
 
-    // Refresh and persists influxql generated template variable values
-    await updateTempVarValues(source, dashboard)
-    await putDashboardByID(dashboardID)
-  }
+    if (!dashboard) {
+      router.push(`/sources/${source.id}/dashboards`)
+      return notify(notifyDashboardNotFound(dashboardID))
+    }
 
-  handleOpenTemplateManager = () => {
-    this.setState({isTemplating: true})
-  }
-
-  handleCloseTemplateManager = isEdited => () => {
-    if (
-      !isEdited ||
-      (isEdited && confirm('Do you want to close without saving?')) // eslint-disable-line no-alert
-    ) {
-      this.setState({isTemplating: false})
+    // Refresh and persists influxql generated template variable values.
+    // If using auth and role is Viewer, temp vars will be stale until dashboard
+    // is refactored so as not to require a write operation (a PUT in this case)
+    if (!isUsingAuth || isUserAuthorized(meRole, EDITOR_ROLE)) {
+      await putDashboardByID(dashboardID)
+      await updateTempVarValues(source, dashboard)
     }
   }
 
-  handleDismissOverlay = () => {
-    this.setState({selectedCell: null})
+  componentWillReceiveProps(nextProps) {
+    const {source, getAnnotationsAsync, timeRange} = this.props
+    if (this.props.autoRefresh !== nextProps.autoRefresh) {
+      clearInterval(this.intervalID)
+      const annotationRange = millisecondTimeRange(timeRange)
+      if (nextProps.autoRefresh) {
+        this.intervalID = setInterval(() => {
+          getAnnotationsAsync(source.links.annotations, annotationRange)
+        }, nextProps.autoRefresh)
+      }
+    }
+  }
+
+  handleWindowResize = () => {
+    this.setState({windowHeight: window.innerHeight})
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.intervalID)
+    this.intervalID = false
+    window.removeEventListener('resize', this.handleWindowResize, true)
+    this.props.handleDismissEditingAnnotation()
+  }
+
+  inView = cell => {
+    const {scrollTop, windowHeight} = this.state
+    const bufferValue = 600
+    const cellTop = cell.y * DASHBOARD_LAYOUT_ROW_HEIGHT
+    const cellBottom = (cell.y + cell.h) * DASHBOARD_LAYOUT_ROW_HEIGHT
+    const bufferedWindowBottom = windowHeight + scrollTop + bufferValue
+    const bufferedWindowTop = scrollTop - bufferValue
+    const topInView = cellTop < bufferedWindowBottom
+    const bottomInView = cellBottom > bufferedWindowTop
+
+    return topInView && bottomInView
+  }
+
+  handleOpenTemplateManager = () => {
+    const {handleShowOverlay, dashboard, source} = this.props
+    const options = {
+      dismissOnClickOutside: false,
+      dismissOnEscape: false,
+    }
+
+    handleShowOverlay(
+      <OverlayContext.Consumer>
+        {({onDismissOverlay}) => {
+          return (
+            <TemplateVariableManager
+              source={source}
+              templates={dashboard.templates}
+              onDismissOverlay={onDismissOverlay}
+              onRunQueryFailure={this.handleRunQueryFailure}
+              onEditTemplateVariables={this.handleEditTemplateVariables}
+            />
+          )
+        }}
+      </OverlayContext.Consumer>,
+      options
+    )
   }
 
   handleSaveEditedCell = newCell => {
-    this.props.dashboardActions
-      .updateDashboardCell(this.getActiveDashboard(), newCell)
-      .then(this.handleDismissOverlay)
-  }
-
-  handleSummonOverlayTechnologies = cell => {
-    this.setState({selectedCell: cell})
+    const {
+      dashboardActions,
+      dashboard,
+      handleHideCellEditorOverlay,
+    } = this.props
+    dashboardActions
+      .updateDashboardCell(dashboard, newCell)
+      .then(handleHideCellEditorOverlay)
   }
 
   handleChooseTimeRange = timeRange => {
-    this.props.dashboardActions.setTimeRange(timeRange)
+    const {
+      dashboard,
+      dashboardActions,
+      getAnnotationsAsync,
+      source,
+    } = this.props
+    dashboardActions.setDashTimeV1(dashboard.id, {
+      ...timeRange,
+      format: FORMAT_INFLUXQL,
+    })
+
+    const annotationRange = millisecondTimeRange(timeRange)
+    getAnnotationsAsync(source.links.annotations, annotationRange)
   }
 
   handleUpdatePosition = cells => {
-    const newDashboard = {...this.getActiveDashboard(), cells}
-    this.props.dashboardActions.updateDashboard(newDashboard)
-    this.props.dashboardActions.putDashboard(newDashboard)
+    const {dashboardActions, dashboard, meRole, isUsingAuth} = this.props
+    const newDashboard = {...dashboard, cells}
+
+    // GridLayout invokes onLayoutChange on first load, which bubbles up to
+    // invoke handleUpdatePosition. If using auth, Viewer is not authorized to
+    // PUT, so until the need for PUT is removed, this is prevented.
+    if (!isUsingAuth || isUserAuthorized(meRole, EDITOR_ROLE)) {
+      dashboardActions.updateDashboard(newDashboard)
+      dashboardActions.putDashboard(newDashboard)
+    }
   }
 
   handleAddCell = () => {
-    this.props.dashboardActions.addDashboardCellAsync(this.getActiveDashboard())
+    const {dashboardActions, dashboard} = this.props
+    dashboardActions.addDashboardCellAsync(dashboard)
+  }
+
+  handleCloneCell = cell => {
+    const {dashboardActions, dashboard} = this.props
+    dashboardActions.cloneDashboardCellAsync(dashboard, cell)
   }
 
   handleEditDashboard = () => {
@@ -104,42 +237,45 @@ class DashboardPage extends Component {
   }
 
   handleRenameDashboard = name => {
+    const {dashboardActions, dashboard} = this.props
     this.setState({isEditMode: false})
-    const newDashboard = {...this.getActiveDashboard(), name}
-    this.props.dashboardActions.updateDashboard(newDashboard)
-    this.props.dashboardActions.putDashboard(newDashboard)
+    const newDashboard = {...dashboard, name}
+
+    dashboardActions.updateDashboard(newDashboard)
+    dashboardActions.putDashboard(newDashboard)
   }
 
-  handleUpdateDashboardCell = newCell => {
-    return () => {
-      this.props.dashboardActions.updateDashboardCell(
-        this.getActiveDashboard(),
-        newCell
-      )
-    }
+  handleUpdateDashboardCell = newCell => () => {
+    const {dashboardActions, dashboard} = this.props
+    dashboardActions.updateDashboardCell(dashboard, newCell)
   }
 
   handleDeleteDashboardCell = cell => {
-    const dashboard = this.getActiveDashboard()
-    this.props.dashboardActions.deleteDashboardCellAsync(dashboard, cell)
+    const {dashboardActions, dashboard} = this.props
+    dashboardActions.deleteDashboardCellAsync(dashboard, cell)
   }
 
   handleSelectTemplate = templateID => values => {
-    const {params: {dashboardID}} = this.props
-    this.props.dashboardActions.templateVariableSelected(
-      +dashboardID,
-      templateID,
-      [values]
-    )
+    const {
+      dashboardActions,
+      dashboard,
+      params: {dashboardID},
+    } = this.props
+    dashboardActions.templateVariableSelected(dashboard.id, templateID, [
+      values,
+    ])
+    dashboardActions.putDashboardByID(dashboardID)
   }
 
   handleEditTemplateVariables = (
     templates,
     onSaveTemplatesSuccess
   ) => async () => {
+    const {dashboardActions, dashboard} = this.props
+
     try {
-      await this.props.dashboardActions.putDashboard({
-        ...this.getActiveDashboard(),
+      await dashboardActions.putDashboard({
+        ...dashboard,
         templates,
       })
       onSaveTemplatesSuccess()
@@ -153,24 +289,6 @@ class DashboardPage extends Component {
     this.props.errorThrown(error)
   }
 
-  synchronizer = dygraph => {
-    const dygraphs = [...this.state.dygraphs, dygraph]
-    const {dashboards, params} = this.props
-    const dashboard = dashboards.find(d => d.id === +params.dashboardID)
-    if (
-      dashboard &&
-      dygraphs.length === dashboard.cells.length &&
-      dashboard.cells.length > 1
-    ) {
-      Dygraph.synchronize(dygraphs, {
-        selection: true,
-        zoom: false,
-        range: false,
-      })
-    }
-    this.setState({dygraphs})
-  }
-
   handleToggleTempVarControls = () => {
     this.props.templateControlBarVisibilityToggled()
   }
@@ -179,27 +297,37 @@ class DashboardPage extends Component {
     this.setState({zoomedTimeRange: {zoomedLower, zoomedUpper}})
   }
 
-  getActiveDashboard() {
-    const {params: {dashboardID}, dashboards} = this.props
-    return dashboards.find(d => d.id === +dashboardID)
+  setScrollTop = event => {
+    this.setState({scrollTop: event.target.scrollTop})
   }
 
   render() {
     const {zoomedTimeRange} = this.state
     const {zoomedLower, zoomedUpper} = zoomedTimeRange
-
     const {
+      isUsingAuth,
+      meRole,
       source,
       sources,
       timeRange,
       timeRange: {lower, upper},
       showTemplateControlBar,
+      dashboard,
       dashboards,
+      lineColors,
+      gaugeColors,
       autoRefresh,
+      selectedCell,
+      manualRefresh,
+      onManualRefresh,
       cellQueryStatus,
+      thresholdsListType,
+      thresholdsListColors,
       dashboardActions,
       inPresentationMode,
       handleChooseAutoRefresh,
+      handleShowCellEditorOverlay,
+      handleHideCellEditorOverlay,
       handleClickPresentationButton,
       params: {sourceID, dashboardID},
     } = this.props
@@ -212,7 +340,7 @@ class DashboardPage extends Component {
 
     const dashboardTime = {
       id: 'dashtime',
-      tempVar: ':dashboardTime:',
+      tempVar: TEMP_VAR_DASHBOARD_TIME,
       type: lowerType,
       values: [
         {
@@ -225,7 +353,7 @@ class DashboardPage extends Component {
 
     const upperDashboardTime = {
       id: 'upperdashtime',
-      tempVar: ':upperDashboardTime:',
+      tempVar: TEMP_VAR_UPPER_DASHBOARD_TIME,
       type: upperType,
       values: [
         {
@@ -235,18 +363,6 @@ class DashboardPage extends Component {
         },
       ],
     }
-
-    // this controls the auto group by behavior
-    const interval = {
-      id: 'interval',
-      type: 'constant',
-      tempVar: ':interval:',
-      resolution: 1000,
-      reportingInterval: 10000000000,
-      values: [],
-    }
-
-    const dashboard = this.getActiveDashboard()
 
     let templatesIncludingDashTime
     if (dashboard) {
@@ -260,89 +376,88 @@ class DashboardPage extends Component {
       templatesIncludingDashTime = []
     }
 
-    const {selectedCell, isEditMode, isTemplating} = this.state
+    const {isEditMode} = this.state
 
+    const names = dashboards.map(d => ({
+      name: d.name,
+      link: `/sources/${sourceID}/dashboards/${d.id}`,
+    }))
     return (
-      <div className="page">
-        {isTemplating
-          ? <OverlayTechnologies>
-              <TemplateVariableManager
-                source={source}
-                templates={dashboard.templates}
-                onClose={this.handleCloseTemplateManager}
-                onRunQueryFailure={this.handleRunQueryFailure}
-                onEditTemplateVariables={this.handleEditTemplateVariables}
-              />
-            </OverlayTechnologies>
-          : null}
-        {selectedCell
-          ? <CellEditorOverlay
-              source={source}
-              sources={sources}
-              cell={selectedCell}
-              timeRange={timeRange}
-              autoRefresh={autoRefresh}
-              dashboardID={dashboardID}
-              queryStatus={cellQueryStatus}
-              onSave={this.handleSaveEditedCell}
-              onCancel={this.handleDismissOverlay}
-              templates={templatesIncludingDashTime}
-              editQueryStatus={dashboardActions.editCellQueryStatus}
-            />
-          : null}
-        {isEditMode
-          ? <DashboardHeaderEdit
-              dashboard={dashboard}
-              onSave={this.handleRenameDashboard}
-              onCancel={this.handleCancelEditDashboard}
-            />
-          : <DashboardHeader
-              source={source}
-              sourceID={sourceID}
-              dashboard={dashboard}
-              timeRange={timeRange}
-              zoomedTimeRange={zoomedTimeRange}
-              autoRefresh={autoRefresh}
-              isHidden={inPresentationMode}
-              onAddCell={this.handleAddCell}
-              onEditDashboard={this.handleEditDashboard}
-              buttonText={dashboard ? dashboard.name : ''}
-              showTemplateControlBar={showTemplateControlBar}
-              handleChooseAutoRefresh={handleChooseAutoRefresh}
-              handleChooseTimeRange={this.handleChooseTimeRange}
-              onToggleTempVarControls={this.handleToggleTempVarControls}
-              handleClickPresentationButton={handleClickPresentationButton}
-            >
-              {dashboards
-                ? dashboards.map((d, i) =>
-                    <li className="dropdown-item" key={i}>
-                      <Link to={`/sources/${sourceID}/dashboards/${d.id}`}>
-                        {d.name}
-                      </Link>
-                    </li>
-                  )
-                : null}
-            </DashboardHeader>}
-        {dashboard
-          ? <Dashboard
-              source={source}
-              sources={sources}
-              dashboard={dashboard}
-              timeRange={timeRange}
-              autoRefresh={autoRefresh}
-              onZoom={this.handleZoomedTimeRange}
-              onAddCell={this.handleAddCell}
-              synchronizer={this.synchronizer}
-              inPresentationMode={inPresentationMode}
-              onPositionChange={this.handleUpdatePosition}
-              onSelectTemplate={this.handleSelectTemplate}
-              onDeleteCell={this.handleDeleteDashboardCell}
-              showTemplateControlBar={showTemplateControlBar}
-              onOpenTemplateManager={this.handleOpenTemplateManager}
-              templatesIncludingDashTime={templatesIncludingDashTime}
-              onSummonOverlayTechnologies={this.handleSummonOverlayTechnologies}
-            />
-          : null}
+      <div className="page dashboard-page">
+        {selectedCell ? (
+          <CellEditorOverlay
+            source={source}
+            sources={sources}
+            cell={selectedCell}
+            timeRange={timeRange}
+            autoRefresh={autoRefresh}
+            dashboardID={dashboardID}
+            queryStatus={cellQueryStatus}
+            onSave={this.handleSaveEditedCell}
+            onCancel={handleHideCellEditorOverlay}
+            templates={templatesIncludingDashTime}
+            editQueryStatus={dashboardActions.editCellQueryStatus}
+            thresholdsListType={thresholdsListType}
+            thresholdsListColors={thresholdsListColors}
+            gaugeColors={gaugeColors}
+            lineColors={lineColors}
+          />
+        ) : null}
+        <DashboardHeader
+          names={names}
+          sourceID={sourceID}
+          dashboard={dashboard}
+          dashboards={dashboards}
+          timeRange={timeRange}
+          isEditMode={isEditMode}
+          autoRefresh={autoRefresh}
+          isHidden={inPresentationMode}
+          onAddCell={this.handleAddCell}
+          onManualRefresh={onManualRefresh}
+          zoomedTimeRange={zoomedTimeRange}
+          onSave={this.handleRenameDashboard}
+          onCancel={this.handleCancelEditDashboard}
+          onEditDashboard={this.handleEditDashboard}
+          activeDashboard={dashboard ? dashboard.name : ''}
+          showTemplateControlBar={showTemplateControlBar}
+          handleChooseAutoRefresh={handleChooseAutoRefresh}
+          handleChooseTimeRange={this.handleChooseTimeRange}
+          onToggleTempVarControls={this.handleToggleTempVarControls}
+          handleClickPresentationButton={handleClickPresentationButton}
+        />
+        {inPresentationMode || (
+          <TemplateControlBar
+            templates={dashboard && dashboard.templates}
+            meRole={meRole}
+            isUsingAuth={isUsingAuth}
+            onSelectTemplate={this.handleSelectTemplate}
+            onOpenTemplateManager={this.handleOpenTemplateManager}
+            isOpen={showTemplateControlBar}
+          />
+        )}
+        {dashboard ? (
+          <Dashboard
+            source={source}
+            sources={sources}
+            setScrollTop={this.setScrollTop}
+            inView={this.inView}
+            dashboard={dashboard}
+            timeRange={timeRange}
+            autoRefresh={autoRefresh}
+            manualRefresh={manualRefresh}
+            onZoom={this.handleZoomedTimeRange}
+            onAddCell={this.handleAddCell}
+            inPresentationMode={inPresentationMode}
+            onPositionChange={this.handleUpdatePosition}
+            onSelectTemplate={this.handleSelectTemplate}
+            onDeleteCell={this.handleDeleteDashboardCell}
+            onCloneCell={this.handleCloneCell}
+            showTemplateControlBar={showTemplateControlBar}
+            onOpenTemplateManager={this.handleOpenTemplateManager}
+            templatesIncludingDashTime={templatesIncludingDashTime}
+            onSummonOverlayTechnologies={handleShowCellEditorOverlay}
+          />
+        ) : null}
       </div>
     )
   }
@@ -366,6 +481,7 @@ DashboardPage.propTypes = {
     pathname: string.isRequired,
     query: shape({}),
   }).isRequired,
+  dashboard: shape({}),
   dashboardActions: shape({
     putDashboard: func.isRequired,
     getDashboardsAsync: func.isRequired,
@@ -401,7 +517,10 @@ DashboardPage.propTypes = {
   handleChooseAutoRefresh: func.isRequired,
   autoRefresh: number.isRequired,
   templateControlBarVisibilityToggled: func.isRequired,
-  timeRange: shape({}).isRequired,
+  timeRange: shape({
+    upper: string,
+    lower: string,
+  }),
   showTemplateControlBar: bool.isRequired,
   inPresentationMode: bool.isRequired,
   handleClickPresentationButton: func,
@@ -410,26 +529,72 @@ DashboardPage.propTypes = {
     status: shape(),
   }).isRequired,
   errorThrown: func,
+  manualRefresh: number.isRequired,
+  onManualRefresh: func.isRequired,
+  meRole: string,
+  isUsingAuth: bool.isRequired,
+  router: shape().isRequired,
+  notify: func.isRequired,
+  getAnnotationsAsync: func.isRequired,
+  handleShowCellEditorOverlay: func.isRequired,
+  handleHideCellEditorOverlay: func.isRequired,
+  handleDismissEditingAnnotation: func.isRequired,
+  selectedCell: shape({}),
+  thresholdsListType: string.isRequired,
+  thresholdsListColors: colorsNumberSchema.isRequired,
+  gaugeColors: colorsNumberSchema.isRequired,
+  lineColors: colorsStringSchema.isRequired,
+  handleShowOverlay: func.isRequired,
 }
 
-const mapStateToProps = state => {
+const mapStateToProps = (state, {params: {dashboardID}}) => {
   const {
     app: {
       ephemeral: {inPresentationMode},
       persisted: {autoRefresh, showTemplateControlBar},
     },
-    dashboardUI: {dashboards, timeRange, cellQueryStatus},
+    dashboardUI: {dashboards, cellQueryStatus},
     sources,
+    dashTimeV1,
+    auth: {me, isUsingAuth},
+    cellEditorOverlay: {
+      cell,
+      thresholdsListType,
+      thresholdsListColors,
+      gaugeColors,
+      lineColors,
+    },
   } = state
 
+  const meRole = _.get(me, 'role', null)
+
+  const timeRange =
+    dashTimeV1.ranges.find(
+      r => r.dashboardID === idNormalizer(TYPE_ID, dashboardID)
+    ) || defaultTimeRange
+
+  const dashboard = dashboards.find(
+    d => d.id === idNormalizer(TYPE_ID, dashboardID)
+  )
+
+  const selectedCell = cell
+
   return {
+    sources,
+    meRole,
+    dashboard,
+    timeRange,
     dashboards,
     autoRefresh,
-    timeRange,
-    showTemplateControlBar,
-    inPresentationMode,
+    isUsingAuth,
     cellQueryStatus,
-    sources,
+    inPresentationMode,
+    showTemplateControlBar,
+    selectedCell,
+    thresholdsListType,
+    thresholdsListColors,
+    gaugeColors,
+    lineColors,
   }
 }
 
@@ -442,6 +607,26 @@ const mapDispatchToProps = dispatch => ({
   handleClickPresentationButton: presentationButtonDispatcher(dispatch),
   dashboardActions: bindActionCreators(dashboardActionCreators, dispatch),
   errorThrown: bindActionCreators(errorThrownAction, dispatch),
+  notify: bindActionCreators(notifyAction, dispatch),
+  getAnnotationsAsync: bindActionCreators(
+    annotationActions.getAnnotationsAsync,
+    dispatch
+  ),
+  handleShowCellEditorOverlay: bindActionCreators(
+    showCellEditorOverlay,
+    dispatch
+  ),
+  handleHideCellEditorOverlay: bindActionCreators(
+    hideCellEditorOverlay,
+    dispatch
+  ),
+  handleDismissEditingAnnotation: bindActionCreators(
+    dismissEditingAnnotation,
+    dispatch
+  ),
+  handleShowOverlay: bindActionCreators(showOverlay, dispatch),
 })
 
-export default connect(mapStateToProps, mapDispatchToProps)(DashboardPage)
+export default connect(mapStateToProps, mapDispatchToProps)(
+  ManualRefresh(withRouter(DashboardPage))
+)

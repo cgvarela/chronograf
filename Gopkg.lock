@@ -12,6 +12,12 @@
   revision = "3ec0642a7fb6488f65b06f9040adc67e3990296a"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/beorn7/perks"
+  packages = ["quantile"]
+  revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
+
+[[projects]]
   name = "github.com/boltdb/bolt"
   packages = ["."]
   revision = "5cc10bbbc5c141029940133bb33c9e969512a698"
@@ -30,7 +36,7 @@
   branch = "master"
   name = "github.com/dustin/go-humanize"
   packages = ["."]
-  revision = "259d2a102b871d17f30e3cd9881a642961a1e486"
+  revision = "bb3d318650d48840a39aa21a027c6630e198e626"
 
 [[projects]]
   name = "github.com/elazarl/go-bindata-assetfs"
@@ -39,18 +45,56 @@
 
 [[projects]]
   name = "github.com/gogo/protobuf"
-  packages = ["gogoproto","jsonpb","plugin/compare","plugin/defaultcheck","plugin/description","plugin/embedcheck","plugin/enumstringer","plugin/equal","plugin/face","plugin/gostring","plugin/marshalto","plugin/oneofcheck","plugin/populate","plugin/size","plugin/stringer","plugin/testgen","plugin/union","plugin/unmarshal","proto","protoc-gen-gogo","protoc-gen-gogo/descriptor","protoc-gen-gogo/generator","protoc-gen-gogo/grpc","protoc-gen-gogo/plugin","vanity","vanity/command"]
-  revision = "6abcf94fd4c97dcb423fdafd42fe9f96ca7e421b"
+  packages = [
+    "codec",
+    "gogoproto",
+    "jsonpb",
+    "plugin/compare",
+    "plugin/defaultcheck",
+    "plugin/description",
+    "plugin/embedcheck",
+    "plugin/enumstringer",
+    "plugin/equal",
+    "plugin/face",
+    "plugin/gostring",
+    "plugin/marshalto",
+    "plugin/oneofcheck",
+    "plugin/populate",
+    "plugin/size",
+    "plugin/stringer",
+    "plugin/testgen",
+    "plugin/union",
+    "plugin/unmarshal",
+    "proto",
+    "protoc-gen-gogo",
+    "protoc-gen-gogo/descriptor",
+    "protoc-gen-gogo/generator",
+    "protoc-gen-gogo/grpc",
+    "protoc-gen-gogo/plugin",
+    "sortkeys",
+    "types",
+    "vanity",
+    "vanity/command"
+  ]
+  revision = "49944b4a4b085da44c43d4b233ea40787396371f"
 
 [[projects]]
   name = "github.com/golang/protobuf"
   packages = ["proto"]
-  revision = "8ee79997227bf9b34611aee7946ae64735e6fd93"
+  revision = "925541529c1fa6821df4e44ce2723319eb2be768"
+  version = "v1.0.0"
 
 [[projects]]
   name = "github.com/google/go-cmp"
-  packages = ["cmp"]
-  revision = "79b2d888f100ec053545168aa94bcfb322e8bfc8"
+  packages = [
+    "cmp",
+    "cmp/cmpopts",
+    "cmp/internal/diff",
+    "cmp/internal/function",
+    "cmp/internal/value"
+  ]
+  revision = "8099a9787ce5dc5984ed879a3bda47dc730a8e97"
+  version = "v0.1.0"
 
 [[projects]]
   name = "github.com/google/go-github"
@@ -58,20 +102,61 @@
   revision = "1bc362c7737e51014af7299e016444b654095ad9"
 
 [[projects]]
+  branch = "master"
   name = "github.com/google/go-querystring"
   packages = ["query"]
-  revision = "9235644dd9e52eeae6fa48efd539fdc351a0af53"
+  revision = "53e6ce116135b80d037921a7fdd5138cf32d7a8a"
+
+[[projects]]
+  name = "github.com/influxdata/ifql"
+  packages = [
+    ".",
+    "ast",
+    "compiler",
+    "complete",
+    "functions",
+    "interpreter",
+    "parser",
+    "query",
+    "query/control",
+    "query/execute",
+    "query/execute/storage",
+    "query/plan",
+    "semantic"
+  ]
+  revision = "9445c4494d4421db2ab1aaaf6f4069446f11752e"
 
 [[projects]]
   name = "github.com/influxdata/influxdb"
-  packages = ["influxql","influxql/internal","influxql/neldermead","models","pkg/escape"]
-  revision = "af72d9b0e4ebe95be30e89b160f43eabaf0529ed"
+  packages = [
+    "influxql",
+    "influxql/internal",
+    "influxql/neldermead",
+    "models",
+    "pkg/escape"
+  ]
+  revision = "cd9363b52cac452113b95554d98a6be51beda24e"
+  version = "v1.1.5"
 
 [[projects]]
   name = "github.com/influxdata/kapacitor"
-  packages = ["client/v1","pipeline","services/k8s/client","tick","tick/ast","tick/stateful","udf/agent"]
-  revision = "3b5512f7276483326577907803167e4bb213c613"
-  version = "v1.3.1"
+  packages = [
+    "client/v1",
+    "pipeline",
+    "pipeline/tick",
+    "services/k8s/client",
+    "tick",
+    "tick/ast",
+    "tick/stateful",
+    "udf/agent"
+  ]
+  revision = "4f10efc41b4dcac070495cf95ba2c41cfcc2aa3a"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/influxdata/tdigest"
+  packages = ["."]
+  revision = "617b83f940fd9acd207f712561a8a0590277fb38"
 
 [[projects]]
   name = "github.com/influxdata/usage-client"
@@ -79,20 +164,85 @@
   revision = "6d3895376368aa52a3a81d2a16e90f0f52371967"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/influxdata/yamux"
+  packages = ["."]
+  revision = "1f58ded512de5feabbe30b60c7d33a7a896c5f16"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/influxdata/yarpc"
+  packages = [
+    ".",
+    "codes",
+    "status",
+    "yarpcproto"
+  ]
+  revision = "f0da2db138cad2fb425541938fc28dd5a5bc6918"
+
+[[projects]]
   name = "github.com/jessevdk/go-flags"
   packages = ["."]
   revision = "4cc2832a6e6d1d3b815e2b9d544b2a4dfb3ce8fa"
 
 [[projects]]
-  name = "github.com/jteeuwen/go-bindata"
+  name = "github.com/kevinburke/go-bindata"
   packages = ["."]
-  revision = "a0ff2567cfb70903282db057e799fd826784d41d"
+  revision = "46eb4c183bfc1ebb527d9d19bcded39476302eb8"
+
+[[projects]]
+  name = "github.com/matttproud/golang_protobuf_extensions"
+  packages = ["pbutil"]
+  revision = "3247c84500bff8d9fb6d579d800f20b3e091582c"
+  version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/opentracing/opentracing-go"
+  packages = [
+    ".",
+    "log"
+  ]
+  revision = "1949ddbfd147afd4d964a9f00b24eb291e0e7c38"
+  version = "v1.0.2"
+
+[[projects]]
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
+
+[[projects]]
+  name = "github.com/prometheus/client_golang"
+  packages = ["prometheus"]
+  revision = "c5b7fccd204277076155f10851dad72b76a49317"
+  version = "v0.8.0"
 
 [[projects]]
   branch = "master"
-  name = "github.com/pkg/errors"
-  packages = ["."]
-  revision = "ff09b135c25aae272398c51a07235b90a75aa4f0"
+  name = "github.com/prometheus/client_model"
+  packages = ["go"]
+  revision = "99fa1f4be8e564e8a6b613da7fa6f46c9edafc6c"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/common"
+  packages = [
+    "expfmt",
+    "internal/bitbucket.org/ww/goautoneg",
+    "model"
+  ]
+  revision = "e4aa40a9169a88835b849a6efb71e05dc04b88f0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/procfs"
+  packages = [
+    ".",
+    "internal/util",
+    "nfs",
+    "xfs"
+  ]
+  revision = "780932d4fbbe0e69b84c34c20f5c8d0981e109ea"
 
 [[projects]]
   name = "github.com/satori/go.uuid"
@@ -107,39 +257,60 @@
 [[projects]]
   name = "github.com/tylerb/graceful"
   packages = ["."]
-  revision = "50a48b6e73fcc75b45e22c05b79629a67c79e938"
-  version = "v1.2.13"
+  revision = "4654dfbb6ad53cb5e27f37d99b02e16c1872fbbb"
+  version = "v1.2.15"
 
 [[projects]]
   name = "golang.org/x/net"
-  packages = ["context","context/ctxhttp"]
+  packages = [
+    "context",
+    "context/ctxhttp"
+  ]
   revision = "749a502dd1eaf3e5bfd4f8956748c502357c0bbe"
 
 [[projects]]
   name = "golang.org/x/oauth2"
-  packages = [".","github","heroku","internal"]
-  revision = "1e695b1c8febf17aad3bfa7bf0a819ef94b98ad5"
+  packages = [
+    ".",
+    "github",
+    "heroku",
+    "internal"
+  ]
+  revision = "2f32c3ac0fa4fb807a0fcefb0b6f2468a0d99bd0"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "f3918c30c5c2cb527c0b071a27c35120a6c0719a"
+  revision = "37707fdb30a5b38865cfb95e5aab41707daec7fd"
 
 [[projects]]
   name = "google.golang.org/api"
-  packages = ["gensupport","googleapi","googleapi/internal/uritemplates","oauth2/v2"]
+  packages = [
+    "gensupport",
+    "googleapi",
+    "googleapi/internal/uritemplates",
+    "oauth2/v2"
+  ]
   revision = "bc20c61134e1d25265dd60049f5735381e79b631"
 
 [[projects]]
   name = "google.golang.org/appengine"
-  packages = ["internal","internal/base","internal/datastore","internal/log","internal/remote_api","internal/urlfetch","urlfetch"]
+  packages = [
+    "internal",
+    "internal/base",
+    "internal/datastore",
+    "internal/log",
+    "internal/remote_api",
+    "internal/urlfetch",
+    "urlfetch"
+  ]
   revision = "150dc57a1b433e64154302bdc40b6bb8aefa313a"
   version = "v1.0.0"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f34fb88755292baba8b52c14bf5b9a028daff96a763368a7cf1de90004d33695"
+  inputs-digest = "177aad722546727b812f2baf43e2fcc614cc1fa209efa3fdffa4dbcafb6dfdad"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -1,26 +1,23 @@
-import u from 'updeep'
+import uuid from 'uuid'
+export const initialState = []
 
-function getInitialState() {
-  return {}
-}
-const initialState = getInitialState()
-
-const notificationsReducer = (state = initialState, action) => {
+export const notifications = (state = initialState, action) => {
   switch (action.type) {
-    case 'NOTIFICATION_RECEIVED': {
-      const {type, message} = action.payload
-      return u.updateIn(type, message, state)
+    case 'PUBLISH_NOTIFICATION': {
+      const {notification} = action.payload
+      const publishedNotification = {
+        ...notification,
+        id: uuid.v4(),
+      }
+
+      return [publishedNotification, ...state]
     }
-    case 'NOTIFICATION_DISMISSED': {
-      const {type} = action.payload
-      return u(u.omit(type), state)
-    }
-    case 'ALL_NOTIFICATIONS_DISMISSED': {
-      return getInitialState()
+
+    case 'DISMISS_NOTIFICATION': {
+      const {id} = action.payload
+      return state.filter(n => n.id !== id)
     }
   }
 
   return state
 }
-
-export default notificationsReducer

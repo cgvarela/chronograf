@@ -1,4 +1,5 @@
-import React, {Component, PropTypes} from 'react'
+import React, {Component} from 'react'
+import PropTypes from 'prop-types'
 import {connect} from 'react-redux'
 
 import SourceIndicator from 'shared/components/SourceIndicator'
@@ -6,7 +7,13 @@ import FancyScrollbar from 'shared/components/FancyScrollbar'
 import LayoutRenderer from 'shared/components/LayoutRenderer'
 
 import {fixtureStatusPageCells} from 'src/status/fixtures'
+import {ErrorHandling} from 'src/shared/decorators/errors'
+import {
+  TEMP_VAR_DASHBOARD_TIME,
+  TEMP_VAR_UPPER_DASHBOARD_TIME,
+} from 'src/shared/constants'
 
+@ErrorHandling
 class StatusPage extends Component {
   constructor(props) {
     super(props)
@@ -22,7 +29,7 @@ class StatusPage extends Component {
 
     const dashboardTime = {
       id: 'dashtime',
-      tempVar: ':dashboardTime:',
+      tempVar: TEMP_VAR_DASHBOARD_TIME,
       type: 'constant',
       values: [
         {
@@ -35,7 +42,7 @@ class StatusPage extends Component {
 
     const upperDashboardTime = {
       id: 'upperdashtime',
-      tempVar: ':upperDashboardTime:',
+      tempVar: TEMP_VAR_UPPER_DASHBOARD_TIME,
       type: 'constant',
       values: [
         {
@@ -62,18 +69,20 @@ class StatusPage extends Component {
         </div>
         <FancyScrollbar className="page-contents">
           <div className="dashboard container-fluid full-width">
-            {cells.length
-              ? <LayoutRenderer
-                  autoRefresh={autoRefresh}
-                  timeRange={timeRange}
-                  cells={cells}
-                  templates={templates}
-                  source={source}
-                  shouldNotBeEditable={true}
-                  isStatusPage={true}
-                  isEditable={false}
-                />
-              : <span>Loading Status Page...</span>}
+            {cells.length ? (
+              <LayoutRenderer
+                autoRefresh={autoRefresh}
+                timeRange={timeRange}
+                cells={cells}
+                templates={templates}
+                source={source}
+                shouldNotBeEditable={true}
+                isStatusPage={true}
+                isEditable={false}
+              />
+            ) : (
+              <span>Loading Status Page...</span>
+            )}
           </div>
         </FancyScrollbar>
       </div>

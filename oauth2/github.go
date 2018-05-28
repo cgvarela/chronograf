@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/google/go-github/github"
 	"github.com/influxdata/chronograf"
@@ -25,32 +26,32 @@ type Github struct {
 	Logger       chronograf.Logger
 }
 
-// Name is the name of the provider
+// Name is the name of the provider.
 func (g *Github) Name() string {
 	return "github"
 }
 
-// ID returns the github application client id
+// ID returns the github application client id.
 func (g *Github) ID() string {
 	return g.ClientID
 }
 
-// Secret returns the github application client secret
+// Secret returns the github application client secret.
 func (g *Github) Secret() string {
 	return g.ClientSecret
 }
 
-// Scopes for github is only the email addres and possible organizations if
+// Scopes for github is only the email address and possible organizations if
 // we are filtering by organizations.
 func (g *Github) Scopes() []string {
 	scopes := []string{"user:email"}
-	if len(g.Orgs) > 0 {
-		scopes = append(scopes, "read:org")
-	}
+	// In order to access a users orgs, we need the "read:org" scope
+	// even if g.Orgs == 0
+	scopes = append(scopes, "read:org")
 	return scopes
 }
 
-// Config is the Github OAuth2 exchange information and endpoints
+// Config is the Github OAuth2 exchange information and endpoints.
 func (g *Github) Config() *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     g.ID(),
@@ -84,6 +85,26 @@ func (g *Github) PrincipalID(provider *http.Client) (string, error) {
 	return email, nil
 }
 
+// Group returns a comma delimited string of Github organizations
+// that a user belongs to in Github
+func (g *Github) Group(provider *http.Client) (string, error) {
+	client := github.NewClient(provider)
+	orgs, err := getOrganizations(client, g.Logger)
+	if err != nil {
+		return "", err
+	}
+
+	groups := []string{}
+	for _, org := range orgs {
+		if org.Login != nil {
+			groups = append(groups, *org.Login)
+			continue
+		}
+	}
+
+	return strings.Join(groups, ","), nil
+}
+
 func randomString(length int) string {
 	k := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, k); err != nil {
@@ -101,7 +122,7 @@ func logResponseError(log chronograf.Logger, resp *github.Response, err error) {
 	}
 }
 
-// isMember makes sure that the user is in one of the required organizations
+// isMember makes sure that the user is in one of the required organizations.
 func isMember(requiredOrgs []string, userOrgs []*github.Organization) bool {
 	for _, requiredOrg := range requiredOrgs {
 		for _, userOrg := range userOrgs {
@@ -113,7 +134,7 @@ func isMember(requiredOrgs []string, userOrgs []*github.Organization) bool {
 	return false
 }
 
-// getOrganizations gets all organization for the currently authenticated user
+// getOrganizations gets all organization for the currently authenticated user.
 func getOrganizations(client *github.Client, log chronograf.Logger) ([]*github.Organization, error) {
 	// Get all pages of results
 	var allOrgs []*github.Organization
@@ -154,9 +175,23 @@ func getPrimaryEmail(client *github.Client, log chronograf.Logger) (string, erro
 
 func primaryEmail(emails []*github.UserEmail) (string, error) {
 	for _, m := range emails {
-		if m != nil && m.Primary != nil && m.Verified != nil && m.Email != nil {
+		if m != nil && getPrimary(m) && getVerified(m) && m.Email != nil {
 			return *m.Email, nil
 		}
 	}
 	return "", errors.New("No primary email address")
+}
+
+func getPrimary(m *github.UserEmail) bool {
+	if m == nil || m.Primary == nil {
+		return false
+	}
+	return *m.Primary
+}
+
+func getVerified(m *github.UserEmail) bool {
+	if m == nil || m.Verified == nil {
+		return false
+	}
+	return *m.Verified
 }
